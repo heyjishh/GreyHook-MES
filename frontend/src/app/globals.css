@@ -1,0 +1,182 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+
+    /* ── Billow-inspired: white/coral surfaces · ink text · coral vibrant ── */
+
+    /* ── Brand — coral vibrant (assertive, not decorative) ── */
+    --brand:        #F05230;
+    --brand-hover:  #D53E1C;
+    --brand-subtle: #FEF0EB;
+    --brand-muted:  #FBBFB2;
+    --brand-fg:     #FFFFFF;
+
+    /* ── Surfaces — Billow white ground ── */
+    --bg:        #FFFFFF;
+    --bg-subtle: #FAFAF8;
+    --bg-muted:  #F4F0EC;
+    --bg-card:   #FFFFFF;
+
+    /* ── Borders — single-pixel, never loud ── */
+    --border:        #E8E4DF;
+    --border-strong: #001C2E;
+
+    /* ── Text — Billow ink ── */
+    --text-primary:   #001C2E;
+    --text-secondary: #2A4A60;
+    --text-tertiary:  #6A8A9A;
+    --text-disabled:  #B0C4CE;
+
+    /* ── States ── */
+    --success:        #1A7A40;
+    --success-subtle: #E8F5EC;
+    --warning:        #A85E00;
+    --warning-subtle: #FEF0D6;
+    --danger:         #CC1800;
+    --danger-subtle:  #FDE8E4;
+
+    /* ── Neutral (offline / absent) ── */
+    --neutral-400: #B0C4CE;
+
+    /* ── Focus — coral glow ── */
+    --focus-ring: 0 0 0 2px #FFFFFF, 0 0 0 4px #F05230;
+
+    /* ── Sidebar — structural navy (the 40 % blue lives here) ── */
+    --sidebar-bg:       #040E36;
+    --sidebar-fg:       #F8F4EE;
+    --sidebar-fg-muted: #7090C0;
+    --sidebar-border:   #0D2060;
+    --sidebar-hover-bg: #071740;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    background-color: var(--bg);
+    color: var(--text-primary);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3, h4 {
+    font-family: "Familjen Grotesk", var(--font-display, ui-sans-serif, system-ui, sans-serif);
+    font-weight: 600;
+    letter-spacing: -0.028em;
+    line-height: 1.08;
+    overflow-wrap: break-word;
+    min-width: 0;
+  }
+
+  ::selection {
+    background-color: var(--brand-subtle);
+    color: var(--brand);
+  }
+}
+
+/* ── Aurora radiant layer ── */
+@keyframes aurora-drift {
+  0%, 100% { transform: translate(0,    0)    scale(1);    }
+  33%       { transform: translate(3%,  -2%)  scale(1.05); }
+  66%       { transform: translate(-2%, 3%)   scale(0.96); }
+}
+@keyframes aurora-pulse {
+  0%, 100% { opacity: 1;    }
+  50%       { opacity: 0.6; }
+}
+
+.aurora-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 0;
+}
+.aurora-layer::before {
+  content: '';
+  position: absolute;
+  top: -20%;
+  right: -8%;
+  width: 60vw;
+  height: 60vh;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center,
+    rgba(240, 82, 48, 0.09) 0%,
+    rgba(240, 82, 48, 0.04) 40%,
+    transparent 70%
+  );
+  filter: blur(48px);
+  animation: aurora-drift 16s ease-in-out infinite,
+             aurora-pulse 10s ease-in-out infinite;
+}
+.aurora-layer::after {
+  content: '';
+  position: absolute;
+  bottom: 5%;
+  left: -4%;
+  width: 44vw;
+  height: 44vh;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at center,
+    rgba(4, 14, 54, 0.06) 0%,
+    rgba(26, 69, 168, 0.03) 50%,
+    transparent 70%
+  );
+  filter: blur(64px);
+  animation: aurora-drift 20s ease-in-out infinite reverse,
+             aurora-pulse 14s ease-in-out infinite 4s;
+}
+
+/* ── Card hover glow + lift (all shadow-card elements) ── */
+[class*="shadow-card"] {
+  transition:
+    box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+    transform  0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+[class*="shadow-card"]:hover {
+  transform: translateY(-2px);
+  box-shadow:
+    0 0 0 1px rgba(240, 82, 48, 0.22),
+    0 8px 32px rgba(0, 28, 46, 0.09),
+    0 0 28px rgba(240, 82, 48, 0.07);
+}
+
+/* ── Sidebar active left-bar ── */
+.nav-active-bar {
+  position: relative;
+}
+.nav-active-bar::before {
+  content: '';
+  position: absolute;
+  left: -8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 60%;
+  background: var(--brand);
+  border-radius: 0 2px 2px 0;
+  box-shadow: 0 0 8px rgba(240, 82, 48, 0.5);
+}
+
+/* ── Logo coral glow pulse ── */
+@keyframes brand-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(240,82,48,0); }
+  50%       { box-shadow: 0 0 0 4px rgba(240,82,48,0.25), 0 0 16px rgba(240,82,48,0.15); }
+}
+.brand-icon {
+  animation: brand-glow 4s ease-in-out infinite;
+}
+
+/* ── Stat value count-in shimmer ── */
+@keyframes value-reveal {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.value-reveal {
+  animation: value-reveal 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}

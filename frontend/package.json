@@ -1,0 +1,39 @@
+{
+  "name": "greyhook-mes-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest"
+  },
+  "dependencies": {
+    "next": "15.0.3",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "echarts": "5.5.1",
+    "echarts-for-react": "3.0.2",
+    "zustand": "5.0.1",
+    "@tanstack/react-query": "5.59.20",
+    "clsx": "2.1.1",
+    "tailwind-merge": "2.5.4",
+    "date-fns": "4.1.0",
+    "lucide-react": "0.460.0"
+  },
+  "devDependencies": {
+    "typescript": "5.6.3",
+    "@types/react": "19.0.0",
+    "@types/react-dom": "19.0.0",
+    "@types/node": "22.9.0",
+    "tailwindcss": "3.4.14",
+    "autoprefixer": "10.4.20",
+    "postcss": "8.4.47",
+    "eslint": "8.57.1",
+    "eslint-config-next": "15.0.3",
+    "vitest": "2.1.4",
+    "@vitejs/plugin-react": "4.3.3"
+  }
+}

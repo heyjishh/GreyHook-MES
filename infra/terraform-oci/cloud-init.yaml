@@ -1,0 +1,150 @@
+#cloud-config
+package_update: true
+package_upgrade: true
+
+packages:
+  - apt-transport-https
+  - ca-certificates
+  - curl
+  - gnupg
+  - lsb-release
+  - git
+  - nginx
+  - ufw
+
+runcmd:
+  - |
+    # Install Docker
+    install -m 0755 -d /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+    chmod a+r /etc/apt/keyrings/docker.asc
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" > /etc/apt/sources.list.d/docker.list
+    apt-get update -qq
+    apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+    systemctl enable docker
+    systemctl start docker
+    usermod -aG docker ubuntu
+
+  - |
+    # Configure UFW firewall
+    ufw --force enable
+    ufw allow ssh
+    ufw allow 80/tcp
+    ufw allow 443/tcp
+    ufw allow 3000/tcp
+
+  - |
+    # Create app directory and env file
+    mkdir -p /opt/greyhook
+    cat > /opt/greyhook/.env << 'ENVEOF'
+    POSTGRES_PASSWORD=${postgres_password}
+    JWT_SECRET=${jwt_secret}
+    NEXT_PUBLIC_USE_MOCK=false
+    NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
+    ENVIRONMENT=production
+    CORS_ORIGINS=http://localhost:3000
+    GF_SECURITY_ADMIN_PASSWORD=devpassword
+    ENVEOF
+    chmod 600 /opt/greyhook/.env
+
+  - |
+    # Create production docker-compose for OCI (mock mode for fast initial deploy)
+    cat > /opt/greyhook/docker-compose.yml << 'DCEOF'
+    services:
+      postgres:
+        image: timescale/timescaledb:2.17.2-pg16
+        restart: unless-stopped
+        environment:
+          POSTGRES_DB: greyhook_mes
+          POSTGRES_USER: greyhook
+          POSTGRES_PASSWORD: ${postgres_password}
+        volumes:
+          - postgres_data:/var/lib/postgresql/data
+        healthcheck:
+          test: ["CMD-SHELL", "pg_isready -U greyhook -d greyhook_mes"]
+          interval: 5s
+          timeout: 5s
+          retries: 10
+
+      valkey:
+        image: valkey/valkey:8.0.2-alpine
+        restart: unless-stopped
+        volumes:
+          - valkey_data:/data
+
+      redpanda:
+        image: redpandadata/redpanda:v24.3.6
+        restart: unless-stopped
+        command:
+          - redpanda
+          - start
+          - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
+          - --advertise-kafka-addr internal://redpanda:9092,external://localhost:19092
+          - --mode dev-container
+          - --smp 2
+          - --memory 2G
+          - --default-log-level=warn
+        volumes:
+          - redpanda_data:/var/lib/redpanda/data
+        healthcheck:
+          test: ["CMD-SHELL", "rpk cluster health | grep -q 'Healthy:.*true'"]
+          interval: 10s
+          timeout: 5s
+          retries: 15
+
+      frontend:
+        image: greyhook-frontend:latest
+        restart: unless-stopped
+        environment:
+          NEXT_PUBLIC_USE_MOCK: "true"
+          NEXT_PUBLIC_API_URL: "http://localhost:8000/api/v1"
+        ports:
+          - "3000:3000"
+
+    volumes:
+      postgres_data:
+      redpanda_data:
+      valkey_data:
+    DCEOF
+
+  - |
+    # Create deploy-app.sh script for when code is pushed to the server
+    cat > /opt/greyhook/deploy-app.sh << 'SHEOF'
+    #!/bin/bash
+    set -e
+    cd /opt/greyhook
+
+    echo "[1/3] Building frontend Docker image..."
+    docker build -t greyhook-frontend:latest /opt/greyhook/frontend/
+
+    echo "[2/3] Starting services..."
+    docker compose up -d
+
+    echo "[3/3] Done. App running at http://$(curl -s ifconfig.me):3000"
+    SHEOF
+    chmod +x /opt/greyhook/deploy-app.sh
+
+  - |
+    # Setup nginx reverse proxy on port 80
+    cat > /etc/nginx/sites-available/greyhook << 'NGEOF'
+    server {
+        listen 80;
+        server_name _;
+
+        location / {
+            proxy_pass http://localhost:3000;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+    }
+    NGEOF
+    ln -sf /etc/nginx/sites-available/greyhook /etc/nginx/sites-enabled/greyhook
+    rm -f /etc/nginx/sites-enabled/default
+    nginx -t && systemctl reload nginx
+
+  - echo "GreyHook MES bootstrap complete"
+
+final_message: |
+  GreyHook MES server is ready.
+  Run /opt/greyhook/deploy-app.sh after uploading the frontend build.

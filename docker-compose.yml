@@ -1,0 +1,288 @@
+services:
+
+  # ─── Data layer ────────────────────────────────────────────────────────────
+
+  postgres:
+    image: timescale/timescaledb:2.17.2-pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: greyhook_mes
+      POSTGRES_USER: greyhook
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-devpassword}
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U greyhook -d greyhook_mes"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  valkey:
+    image: valkey/valkey:8.0.2-alpine
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    volumes:
+      - valkey_data:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # ─── Messaging ─────────────────────────────────────────────────────────────
+
+  redpanda:
+    image: redpandadata/redpanda:v24.3.6
+    restart: unless-stopped
+    command:
+      - redpanda
+      - start
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr internal://redpanda:9092,external://localhost:19092
+      - --pandaproxy-addr internal://0.0.0.0:8082,external://0.0.0.0:18082
+      - --advertise-pandaproxy-addr internal://redpanda:8082,external://localhost:18082
+      - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:18081
+      - --rpc-addr redpanda:33145
+      - --advertise-rpc-addr redpanda:33145
+      - --mode dev-container
+      - --smp 1
+      - --memory 512M
+      - --default-log-level=warn
+    ports:
+      - "19092:19092"
+      - "18082:18082"
+      - "18081:18081"
+    volumes:
+      - redpanda_data:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -q 'Healthy:.*true'"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+
+  redpanda-init:
+    image: redpandadata/redpanda:v24.3.6
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    entrypoint: >
+      bash -c "
+        rpk topic create mes.telemetry.raw       --brokers redpanda:9092 --partitions 4 --replicas 1 || true &&
+        rpk topic create mes.telemetry.normalized --brokers redpanda:9092 --partitions 4 --replicas 1 || true &&
+        rpk topic create mes.production.events   --brokers redpanda:9092 --partitions 2 --replicas 1 || true &&
+        rpk topic create mes.downtime.events     --brokers redpanda:9092 --partitions 2 --replicas 1 || true &&
+        rpk topic create mes.alerts              --brokers redpanda:9092 --partitions 1 --replicas 1 || true &&
+        echo 'Topics ready.'
+      "
+    restart: "no"
+
+  mosquitto:
+    image: eclipse-mosquitto:2.0.20
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+    volumes:
+      - ./infra/docker/mosquitto/mosquitto.conf:/mosquitto/config/mosquitto.conf:ro
+      - mosquitto_data:/mosquitto/data
+
+  # ─── Workflow engine ────────────────────────────────────────────────────────
+
+  temporal:
+    image: temporalio/auto-setup:1.26.2
+    restart: unless-stopped
+    environment:
+      DB: postgres12
+      DB_PORT: 5432
+      POSTGRES_USER: greyhook
+      POSTGRES_PWD: ${POSTGRES_PASSWORD:-devpassword}
+      POSTGRES_SEEDS: postgres
+      DYNAMIC_CONFIG_FILE_PATH: /etc/temporal/config/dynamicconfig/development-sql.yaml
+    ports:
+      - "7233:7233"
+    volumes:
+      - ./infra/docker/temporal/dynamicconfig:/etc/temporal/config/dynamicconfig:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  temporal-ui:
+    image: temporalio/ui:2.33.0
+    restart: unless-stopped
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_CORS_ORIGINS: http://localhost:3000
+    ports:
+      - "8088:8080"
+    depends_on:
+      - temporal
+    profiles:
+      - monitoring
+
+  redpanda-console:
+    image: redpandadata/console:v2.8.0
+    restart: unless-stopped
+    environment:
+      KAFKA_BROKERS: redpanda:9092
+    ports:
+      - "8080:8080"
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    profiles:
+      - monitoring
+
+  # ─── Observability ──────────────────────────────────────────────────────────
+
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infra/monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=15d
+      - --web.console.libraries=/usr/share/prometheus/console_libraries
+      - --web.console.templates=/usr/share/prometheus/consoles
+    profiles:
+      - monitoring
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-devpassword}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH: /etc/grafana/dashboards/overview.json
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./infra/monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/monitoring/grafana/dashboards:/etc/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    profiles:
+      - monitoring
+
+  # ─── Edge services ─────────────────────────────────────────────────────────
+
+  edge:
+    build:
+      context: .
+      dockerfile: edge/Dockerfile
+    restart: unless-stopped
+    environment:
+      MQTT_BROKER_URL: mqtt://mosquitto:1883
+      KAFKA_BROKERS: redpanda:9092
+      ORG_ID: ${ORG_ID:-00000000-0000-0000-0000-000000000001}
+      FACTORY_ID: ${FACTORY_ID:-00000000-0000-0000-0000-000000000001}
+      GATEWAY_ID: ${GATEWAY_ID:-edge-gateway-01}
+    depends_on:
+      mosquitto:
+        condition: service_started
+      redpanda:
+        condition: service_healthy
+      redpanda-init:
+        condition: service_completed_successfully
+
+  telemetry-processor:
+    build:
+      context: .
+      dockerfile: telemetry-processor/Dockerfile
+    restart: unless-stopped
+    environment:
+      KAFKA_BROKERS: redpanda:9092
+      DATABASE_URL: postgresql://greyhook:${POSTGRES_PASSWORD:-devpassword}@postgres:5432/greyhook_mes
+      CONSUMER_GROUP_ID: telemetry-processor
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+      redpanda-init:
+        condition: service_completed_successfully
+
+  # ─── Application ────────────────────────────────────────────────────────────
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+asyncpg://greyhook:${POSTGRES_PASSWORD:-devpassword}@postgres:5432/greyhook_mes
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      VALKEY_URL: redis://valkey:6379
+      TEMPORAL_HOST: temporal:7233
+      TEMPORAL_NAMESPACE: default
+      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-prod}
+      JWT_ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: 15
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      LLM_PROVIDER: ${LLM_PROVIDER:-claude}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_SERVICE_NAME: greyhook-backend
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+      valkey:
+        condition: service_healthy
+      temporal:
+        condition: service_started
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: http://backend:8000/api/v1
+      NEXT_PUBLIC_USE_MOCK: "false"
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+  simulator:
+    build:
+      context: ./simulator
+      dockerfile: Dockerfile
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      MQTT_BROKER_URL: mosquitto:1883
+      DEMO_ORG_ID: ${DEMO_ORG_ID:-00000000-0000-0000-0000-000000000001}
+      DEMO_FACTORY_ID: ${DEMO_FACTORY_ID:-00000000-0000-0000-0000-000000000001}
+      SIM_SPEED_FACTOR: ${SIM_SPEED_FACTOR:-1.0}
+    depends_on:
+      mosquitto:
+        condition: service_started
+      redpanda:
+        condition: service_healthy
+      redpanda-init:
+        condition: service_completed_successfully
+    profiles:
+      - simulate
+
+volumes:
+  postgres_data:
+  redpanda_data:
+  valkey_data:
+  mosquitto_data:
+  prometheus_data:
+  grafana_data:

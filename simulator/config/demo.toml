@@ -1,0 +1,24 @@
+org_id = "00000000-0000-0000-0000-000000000001"
+factory_id = "00000000-0000-0000-0000-000000000001"
+gateway_id = "sim-gateway-01"
+
+[[machines]]
+id = "M001"
+name = "CNC Lathe"
+machine_type = "cnc_lathe"
+ideal_cycle_time_seconds = 72.0
+order_id = "00000000-0000-0000-0001-000000000001"
+
+[[machines]]
+id = "M002"
+name = "Quality Inspection"
+machine_type = "quality_inspection"
+ideal_cycle_time_seconds = 50.0
+order_id = "00000000-0000-0000-0001-000000000002"
+
+[[machines]]
+id = "M003"
+name = "Assembly Station"
+machine_type = "assembly_station"
+ideal_cycle_time_seconds = 90.0
+order_id = "00000000-0000-0000-0001-000000000003"
