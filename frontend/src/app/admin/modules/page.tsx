@@ -4,39 +4,44 @@ import { useEffect, useState } from "react";
 import { useAuthStore } from "@/store/auth";
 import { useModulesStore, type ModuleDef } from "@/store/modules";
 import {
-  LayoutGrid, Search, CheckCircle2, Circle, Sparkles,
-  RefreshCw, ChevronDown, ChevronRight, Filter,
+  LayoutGrid, Search, CheckCircle2, Sparkles,
+  RefreshCw, Package, Zap, Shield, Cable, Database, BarChart3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const CATEGORIES = [
-  "all", "core", "quality", "maintenance", "planning",
-  "integration", "analytics", "compliance", "labor", "energy", "enterprise",
+  { id: "all",         label: "All",         icon: Package   },
+  { id: "core",        label: "Core",        icon: Zap       },
+  { id: "quality",     label: "Quality",     icon: CheckCircle2 },
+  { id: "maintenance", label: "Maintenance", icon: Shield    },
+  { id: "analytics",   label: "Analytics",   icon: BarChart3 },
+  { id: "integration", label: "Integration", icon: Cable     },
+  { id: "compliance",  label: "Compliance",  icon: Shield    },
+  { id: "enterprise",  label: "Enterprise",  icon: Database  },
 ];
 
 const INDUSTRIES = [
-  { id: "automotive",    label: "Automotive" },
-  { id: "pharmaceutical",label: "Pharmaceutical" },
-  { id: "food_beverage", label: "Food & Beverage" },
-  { id: "electronics",   label: "Electronics" },
-  { id: "textile",       label: "Textile" },
-  { id: "aerospace",     label: "Aerospace" },
-  { id: "chemical",      label: "Chemical" },
-  { id: "plastics",      label: "Plastics" },
-  { id: "generic",       label: "Generic" },
+  { id: "automotive",     label: "Automotive",     emoji: "🚗" },
+  { id: "pharmaceutical", label: "Pharma",          emoji: "💊" },
+  { id: "food_beverage",  label: "Food & Bev",     emoji: "🍶" },
+  { id: "electronics",    label: "Electronics",    emoji: "🔌" },
+  { id: "textile",        label: "Textile",        emoji: "🧵" },
+  { id: "aerospace",      label: "Aerospace",      emoji: "✈️" },
+  { id: "chemical",       label: "Chemical",       emoji: "⚗️" },
+  { id: "generic",        label: "Generic MES",    emoji: "🏭" },
 ];
 
 const CAT_COLOR: Record<string, string> = {
-  core:        "bg-blue-100 text-blue-700",
-  quality:     "bg-green-100 text-green-700",
-  maintenance: "bg-orange-100 text-orange-700",
-  planning:    "bg-purple-100 text-purple-700",
-  integration: "bg-cyan-100 text-cyan-700",
-  analytics:   "bg-indigo-100 text-indigo-700",
-  compliance:  "bg-red-100 text-red-700",
-  labor:       "bg-yellow-100 text-yellow-700",
-  energy:      "bg-lime-100 text-lime-700",
-  enterprise:  "bg-slate-100 text-slate-700",
+  core:        "bg-blue-50 text-blue-700 border-blue-200",
+  quality:     "bg-green-50 text-green-700 border-green-200",
+  maintenance: "bg-orange-50 text-orange-700 border-orange-200",
+  planning:    "bg-purple-50 text-purple-700 border-purple-200",
+  integration: "bg-cyan-50 text-cyan-700 border-cyan-200",
+  analytics:   "bg-indigo-50 text-indigo-700 border-indigo-200",
+  compliance:  "bg-red-50 text-red-700 border-red-200",
+  labor:       "bg-yellow-50 text-yellow-700 border-yellow-200",
+  energy:      "bg-lime-50 text-lime-700 border-lime-200",
+  enterprise:  "bg-slate-50 text-slate-700 border-slate-200",
 };
 
 export default function ModulesPage() {
@@ -47,8 +52,8 @@ export default function ModulesPage() {
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("all");
   const [applying, setApplying] = useState(false);
+  const [appliedTemplate, setAppliedTemplate] = useState<string | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
-  const [showTemplates, setShowTemplates] = useState(false);
 
   const orgId = (user as { organization_id?: string })?.organization_id;
   const base = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
@@ -66,7 +71,8 @@ export default function ModulesPage() {
   }, []);
 
   const filtered = catalog.filter((m) => {
-    const matchSearch = m.label.toLowerCase().includes(search.toLowerCase()) ||
+    const matchSearch = !search ||
+      m.label.toLowerCase().includes(search.toLowerCase()) ||
       m.description.toLowerCase().includes(search.toLowerCase());
     const matchCat = category === "all" || m.category === category;
     return matchSearch && matchCat;
@@ -102,62 +108,72 @@ export default function ModulesPage() {
       if (res.ok) {
         const rows: { module_id: string; is_enabled: boolean }[] = await res.json();
         setEnabledIds(rows.filter((r) => r.is_enabled).map((r) => r.module_id));
-        setShowTemplates(false);
+        setAppliedTemplate(industry);
+        setTimeout(() => setAppliedTemplate(null), 3000);
       }
     } finally {
       setApplying(false);
     }
   };
 
-  const enabledCount = enabledIds ? [...enabledIds].filter((id) =>
-    catalog.some((m) => m.id === id)
-  ).length : catalog.length;
+  const enabledCount = enabledIds
+    ? [...enabledIds].filter((id) => catalog.some((m) => m.id === id)).length
+    : catalog.length;
+
+  const grouped = filtered.reduce<Record<string, ModuleDef[]>>((acc, m) => {
+    const key = m.category || "other";
+    (acc[key] = acc[key] ?? []).push(m);
+    return acc;
+  }, {});
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-xl font-bold text-[#001C2E] font-mono tracking-tight flex items-center gap-2">
-            <LayoutGrid size={20} className="text-[#F05230]" />
-            Module Catalog
-          </h1>
-          <p className="text-sm text-[#6A8A9A] mt-1">
-            {enabledCount} of {catalog.length} modules enabled for your organisation.
-          </p>
-        </div>
+      {/* Header */}
+      <div>
+        <h1 className="text-xl font-bold text-[#001C2E] font-mono tracking-tight flex items-center gap-2">
+          <LayoutGrid size={20} className="text-[#F05230]" />
+          Module Catalog
+        </h1>
+        <p className="text-sm text-[#6A8A9A] mt-1">
+          {enabledCount} of {catalog.length} modules enabled organisation-wide.
+          Use plant pages to configure per-plant plugins.
+        </p>
+      </div>
 
-        <div className="flex gap-2 flex-wrap">
-          <button
-            onClick={() => setShowTemplates(!showTemplates)}
-            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[#E8E4DF] bg-white text-xs font-medium text-[#001C2E] hover:bg-[#FAFAF8] transition-colors"
-          >
-            <Sparkles size={13} className="text-[#F05230]" />
-            Apply Template
-            {showTemplates ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-          </button>
+      {/* Industry Templates */}
+      <div className="p-5 rounded-xl border border-[#E8E4DF] bg-white">
+        <div className="flex items-center gap-2 mb-2">
+          <Sparkles size={14} className="text-[#F05230]" />
+          <span className="text-xs font-bold text-[#001C2E] font-mono uppercase tracking-widest">Industry Templates</span>
+        </div>
+        <p className="text-xs text-[#6A8A9A] mb-4">
+          Instantly enable the recommended module set for your industry. Fine-tune below.
+        </p>
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
+          {INDUSTRIES.map((ind) => (
+            <button
+              key={ind.id}
+              onClick={() => applyTemplate(ind.id)}
+              disabled={applying}
+              className={cn(
+                "flex flex-col items-center gap-1.5 p-3 rounded-xl border text-xs font-medium transition-all",
+                appliedTemplate === ind.id
+                  ? "border-[#F05230] bg-[#FEF0EB] text-[#F05230]"
+                  : "border-[#E8E4DF] text-[#001C2E] hover:border-[#F05230]/40 hover:bg-[#FEF0EB]/30",
+                applying && "opacity-50 cursor-not-allowed"
+              )}
+            >
+              <span className="text-lg leading-none">{ind.emoji}</span>
+              <span>{ind.label}</span>
+              {appliedTemplate === ind.id && (
+                <CheckCircle2 size={12} className="text-[#F05230]" />
+              )}
+            </button>
+          ))}
         </div>
       </div>
 
-      {showTemplates && (
-        <div className="p-4 rounded-xl border border-[#E8E4DF] bg-white">
-          <p className="text-xs font-semibold text-[#001C2E] mb-3 font-mono uppercase tracking-wider">
-            Industry Templates — applies recommended module set instantly
-          </p>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2">
-            {INDUSTRIES.map((ind) => (
-              <button
-                key={ind.id}
-                onClick={() => applyTemplate(ind.id)}
-                disabled={applying}
-                className="px-3 py-2 rounded-lg border border-[#E8E4DF] text-xs font-medium text-[#001C2E] hover:border-[#F05230] hover:text-[#F05230] hover:bg-[#FEF0EB] transition-all disabled:opacity-50"
-              >
-                {applying ? <RefreshCw size={12} className="animate-spin mx-auto" /> : ind.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
+      {/* Search + category filter */}
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#6A8A9A]" />
@@ -169,75 +185,155 @@ export default function ModulesPage() {
           />
         </div>
         <div className="flex gap-1 flex-wrap">
-          {CATEGORIES.map((cat) => (
-            <button
-              key={cat}
-              onClick={() => setCategory(cat)}
-              className={cn(
-                "px-2.5 py-1.5 rounded-lg text-xs font-medium capitalize transition-all",
-                category === cat
-                  ? "bg-[#F05230] text-white"
-                  : "bg-white border border-[#E8E4DF] text-[#6A8A9A] hover:border-[#F05230]/40 hover:text-[#001C2E]"
-              )}
-            >
-              {cat}
-            </button>
-          ))}
+          {CATEGORIES.map((cat) => {
+            const Icon = cat.icon;
+            return (
+              <button
+                key={cat.id}
+                onClick={() => setCategory(cat.id)}
+                className={cn(
+                  "inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium transition-all",
+                  category === cat.id
+                    ? "bg-[#F05230] text-white"
+                    : "bg-white border border-[#E8E4DF] text-[#6A8A9A] hover:border-[#F05230]/40 hover:text-[#001C2E]"
+                )}
+              >
+                <Icon size={11} />
+                {cat.label}
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-        {filtered.map((mod) => {
-          const isOn = enabledIds ? enabledIds.has(mod.id) : true;
-          const isSaving = saving === mod.id;
-          return (
-            <div
-              key={mod.id}
-              onClick={() => !mod.is_core && handleToggle(mod)}
-              className={cn(
-                "group relative p-4 rounded-xl border transition-all",
-                isOn
-                  ? "border-[#F05230]/30 bg-[#FEF0EB]/30 hover:border-[#F05230]/50"
-                  : "border-[#E8E4DF] bg-white hover:border-[#001C2E]/20",
-                mod.is_core ? "opacity-80 cursor-default" : "cursor-pointer"
-              )}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="font-semibold text-sm text-[#001C2E]">{mod.label}</span>
-                    <span className={cn(
-                      "px-1.5 py-0.5 rounded text-2xs font-mono uppercase tracking-wider",
-                      CAT_COLOR[mod.category] ?? "bg-gray-100 text-gray-600"
-                    )}>
-                      {mod.category}
-                    </span>
-                    {mod.is_core && (
-                      <span className="px-1.5 py-0.5 rounded text-2xs font-mono bg-[#001C2E] text-white uppercase tracking-wider">
-                        core
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-[#6A8A9A] leading-relaxed">{mod.description}</p>
-                </div>
-                <div className="shrink-0">
-                  {isSaving ? (
-                    <RefreshCw size={18} className="text-[#F05230] animate-spin" />
-                  ) : isOn ? (
-                    <CheckCircle2 size={18} className="text-[#F05230]" />
-                  ) : (
-                    <Circle size={18} className="text-[#E8E4DF] group-hover:text-[#6A8A9A]" />
-                  )}
-                </div>
+      {/* Grouped module grid */}
+      {category === "all" && Object.keys(grouped).length > 0 ? (
+        <div className="space-y-6">
+          {Object.entries(grouped).map(([cat, mods]) => (
+            <div key={cat}>
+              <div className="flex items-center gap-2 mb-3">
+                <span className={cn(
+                  "px-2 py-0.5 rounded-md text-2xs font-mono uppercase tracking-wider border",
+                  CAT_COLOR[cat] ?? "bg-gray-50 text-gray-700 border-gray-200"
+                )}>
+                  {cat}
+                </span>
+                <span className="text-xs text-[#6A8A9A]">{mods.length} module{mods.length !== 1 ? "s" : ""}</span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                {mods.map((mod) => (
+                  <ModuleCard
+                    key={mod.id}
+                    mod={mod}
+                    isEnabled={enabledIds ? enabledIds.has(mod.id) : true}
+                    isSaving={saving === mod.id}
+                    onToggle={handleToggle}
+                  />
+                ))}
               </div>
             </div>
-          );
-        })}
-        {filtered.length === 0 && (
-          <div className="col-span-full py-16 text-center text-sm text-[#6A8A9A]">
-            No modules match your search.
+          ))}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+          {filtered.map((mod) => (
+            <ModuleCard
+              key={mod.id}
+              mod={mod}
+              isEnabled={enabledIds ? enabledIds.has(mod.id) : true}
+              isSaving={saving === mod.id}
+              onToggle={handleToggle}
+            />
+          ))}
+          {filtered.length === 0 && (
+            <div className="col-span-full py-16 text-center text-sm text-[#6A8A9A]">
+              No modules match your search.
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ModuleCard({
+  mod,
+  isEnabled,
+  isSaving,
+  onToggle,
+}: {
+  mod: ModuleDef;
+  isEnabled: boolean;
+  isSaving: boolean;
+  onToggle: (mod: ModuleDef) => void;
+}) {
+  return (
+    <div className={cn(
+      "flex flex-col rounded-xl border bg-white transition-all overflow-hidden",
+      isEnabled ? "border-[#F05230]/30 shadow-sm" : "border-[#E8E4DF]"
+    )}>
+      <div className="p-4 flex-1">
+        <div className="flex items-start gap-3">
+          <div className={cn(
+            "w-9 h-9 rounded-xl flex items-center justify-center shrink-0 text-sm font-mono font-bold",
+            isEnabled ? "bg-[#FEF0EB] text-[#F05230]" : "bg-[#F5F4F1] text-[#6A8A9A]"
+          )}>
+            {mod.label.slice(0, 2).toUpperCase()}
           </div>
+          <div className="flex-1 min-w-0">
+            <div className="font-semibold text-sm text-[#001C2E] mb-0.5">{mod.label}</div>
+            <div className="flex items-center gap-1.5 mb-2">
+              <span className={cn(
+                "px-1.5 py-0.5 rounded text-2xs font-mono uppercase tracking-wider border",
+                CAT_COLOR[mod.category] ?? "bg-gray-50 text-gray-600 border-gray-200"
+              )}>
+                {mod.category}
+              </span>
+              {mod.is_core && (
+                <span className="px-1.5 py-0.5 rounded text-2xs font-mono bg-[#001C2E] text-white uppercase tracking-wider">
+                  core
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-[#6A8A9A] leading-relaxed">{mod.description}</p>
+          </div>
+        </div>
+      </div>
+      <div className={cn(
+        "px-4 py-3 border-t flex items-center justify-between",
+        isEnabled ? "border-[#F05230]/20 bg-[#FEF0EB]/20" : "border-[#E8E4DF] bg-[#F5F4F1]/30"
+      )}>
+        {isEnabled ? (
+          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[#1A7A40]">
+            <CheckCircle2 size={12} />
+            Enabled
+          </span>
+        ) : (
+          <span className="text-xs text-[#6A8A9A]">Disabled</span>
         )}
+        <button
+          onClick={() => !mod.is_core && onToggle(mod)}
+          disabled={isSaving || mod.is_core}
+          className={cn(
+            "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all",
+            mod.is_core
+              ? "bg-[#E8E4DF] text-[#6A8A9A] cursor-default"
+              : isEnabled
+                ? "bg-white border border-[#E8E4DF] text-[#6A8A9A] hover:border-red-300 hover:text-red-600"
+                : "bg-[#F05230] text-white hover:bg-[#d94720]",
+            isSaving && "opacity-60"
+          )}
+        >
+          {isSaving ? (
+            <RefreshCw size={11} className="animate-spin" />
+          ) : mod.is_core ? (
+            "Required"
+          ) : isEnabled ? (
+            "Disable"
+          ) : (
+            "Enable"
+          )}
+        </button>
       </div>
     </div>
   );

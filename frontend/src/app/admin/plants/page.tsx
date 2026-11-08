@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useAuthStore } from "@/store/auth";
 import {
-  Factory, Plus, MapPin, Clock, Trash2, Edit2, CheckCircle2, XCircle, RefreshCw,
+  Factory, Plus, MapPin, Clock, Trash2, CheckCircle2, XCircle, RefreshCw,
+  PlugZap, ChevronRight, Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -40,6 +42,7 @@ export default function PlantsPage() {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<PlantForm>({ name: "", code: "", location: "", timezone: "Asia/Kolkata" });
   const [error, setError] = useState<string | null>(null);
+  const [justCreated, setJustCreated] = useState<Plant | null>(null);
 
   const base = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
   const headers = { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) };
@@ -75,6 +78,8 @@ export default function PlantsPage() {
         setError(e?.detail ?? "Failed to create plant.");
         return;
       }
+      const created: Plant = await res.json().catch(() => ({ id: Date.now().toString(), ...form, is_active: true, created_at: new Date().toISOString() }));
+      setJustCreated(created);
       setForm({ name: "", code: "", location: "", timezone: "Asia/Kolkata" });
       setShowForm(false);
       fetchPlants();
@@ -106,6 +111,44 @@ export default function PlantsPage() {
           <Plus size={13} /> Add Plant
         </button>
       </div>
+
+      {/* Post-creation CTA */}
+      {justCreated && (
+        <div className="p-5 rounded-xl border border-[#1A7A40]/30 bg-[#E8F5EC] flex items-start gap-4">
+          <CheckCircle2 size={18} className="text-[#1A7A40] shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <div className="font-semibold text-sm text-[#1A7A40] mb-1">
+              Plant <span className="font-bold">{justCreated.name}</span> created!
+            </div>
+            <p className="text-xs text-[#1A7A40]/80 mb-3">
+              Next step: choose which MES plugins and modules to activate for this plant.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Link
+                href={`/admin/plants/${justCreated.id}/plugins`}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-[#1A7A40] text-white text-xs font-semibold hover:bg-[#166234] transition-colors"
+              >
+                <PlugZap size={13} />
+                Configure Plugins for this Plant
+                <ChevronRight size={12} />
+              </Link>
+              <Link
+                href="/admin/modules"
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg border border-[#1A7A40]/30 text-xs font-medium text-[#1A7A40] hover:bg-[#1A7A40]/10 transition-colors"
+              >
+                <Sparkles size={12} />
+                Or browse all modules
+              </Link>
+              <button
+                onClick={() => setJustCreated(null)}
+                className="px-3 py-2 rounded-lg text-xs text-[#1A7A40]/60 hover:text-[#1A7A40]"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showForm && (
         <div className="p-5 rounded-xl border border-[#F05230]/30 bg-[#FEF0EB]/20 space-y-4">
@@ -160,32 +203,43 @@ export default function PlantsPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {plants.map((plant) => (
-            <div key={plant.id} className="p-5 rounded-xl border border-[#E8E4DF] bg-white hover:border-[#F05230]/30 transition-all">
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="font-semibold text-sm text-[#001C2E]">{plant.name}</span>
-                    <span className="font-mono text-2xs px-1.5 py-0.5 rounded bg-[#F05230]/10 text-[#F05230]">{plant.code}</span>
-                  </div>
-                  {plant.location && (
-                    <div className="flex items-center gap-1 text-xs text-[#6A8A9A] mb-1">
-                      <MapPin size={11} /> {plant.location}
+            <div key={plant.id} className="rounded-xl border border-[#E8E4DF] bg-white hover:border-[#F05230]/30 transition-all overflow-hidden">
+              <div className="p-5">
+                <div className="flex items-start justify-between gap-2 mb-3">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-semibold text-sm text-[#001C2E]">{plant.name}</span>
+                      <span className="font-mono text-2xs px-1.5 py-0.5 rounded bg-[#F05230]/10 text-[#F05230]">{plant.code}</span>
                     </div>
-                  )}
-                  <div className="flex items-center gap-1 text-xs text-[#6A8A9A]">
-                    <Clock size={11} /> {plant.timezone}
+                    {plant.location && (
+                      <div className="flex items-center gap-1 text-xs text-[#6A8A9A] mb-0.5">
+                        <MapPin size={11} /> {plant.location}
+                      </div>
+                    )}
+                    <div className="flex items-center gap-1 text-xs text-[#6A8A9A]">
+                      <Clock size={11} /> {plant.timezone}
+                    </div>
                   </div>
-                </div>
-                <div className="flex items-center gap-1">
-                  <div className={cn("w-2 h-2 rounded-full", plant.is_active ? "bg-[#1A7A40]" : "bg-[#E8E4DF]")} />
-                  <button
-                    onClick={() => handleDelete(plant.id)}
-                    className="p-1.5 rounded-lg text-[#6A8A9A] hover:text-red-500 hover:bg-red-50 transition-colors"
-                  >
-                    <Trash2 size={13} />
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <div className={cn("w-2 h-2 rounded-full shrink-0", plant.is_active ? "bg-[#1A7A40]" : "bg-[#E8E4DF]")} />
+                    <button
+                      onClick={() => handleDelete(plant.id)}
+                      className="p-1.5 rounded-lg text-[#6A8A9A] hover:text-red-500 hover:bg-red-50 transition-colors"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
                 </div>
               </div>
+              {/* Plugin CTA footer */}
+              <Link
+                href={`/admin/plants/${plant.id}/plugins`}
+                className="flex items-center gap-2 px-5 py-3 bg-[#F5F4F1] border-t border-[#E8E4DF] text-xs font-medium text-[#6A8A9A] hover:bg-[#FEF0EB] hover:text-[#F05230] transition-all group"
+              >
+                <PlugZap size={13} className="group-hover:text-[#F05230]" />
+                Configure Plugins & Modules
+                <ChevronRight size={12} className="ml-auto" />
+              </Link>
             </div>
           ))}
         </div>
