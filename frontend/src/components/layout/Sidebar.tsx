@@ -88,7 +88,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/dashboard/capa",         label: "CAPA",            icon: ShieldAlert },
   { href: "/dashboard/energy",       label: "Energy",          icon: Zap },
   { href: "/dashboard/documents",    label: "Documents",       icon: BookMarked },
-  { href: "/dashboard/erp-sync",        label: "ERP Sync",         icon: Cable },
+  { href: "/dashboard/erp-sync",        label: "SAP & Oracle",     icon: Cable,     section: "Integrations" },
   { href: "/dashboard/andon",           label: "ANDON Board",      icon: Radio },
   { href: "/dashboard/tooling",         label: "Tooling",          icon: Hammer },
   { href: "/dashboard/genealogy",       label: "Genealogy",        icon: Network },

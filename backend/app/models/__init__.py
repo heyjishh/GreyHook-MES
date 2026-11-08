@@ -2,6 +2,7 @@ from app.models.ai import AIInvestigation
 from app.models.audit import AuditLog, KafkaConsumerCheckpoint
 from app.models.downtime import DowntimeEvent
 from app.models.factory import Factory, ProductionLine
+from app.models.integration import ERPMaterial, ERPProductionOrder, IntegrationConnector, IntegrationSyncLog
 from app.models.machine import Machine
 from app.models.oee import OEEAggregate
 from app.models.organization import Organization
@@ -15,7 +16,11 @@ __all__ = [
     "AIInvestigation",
     "AuditLog",
     "DowntimeEvent",
+    "ERPMaterial",
+    "ERPProductionOrder",
     "Factory",
+    "IntegrationConnector",
+    "IntegrationSyncLog",
     "KafkaConsumerCheckpoint",
     "Machine",
     "MachineEvent",
