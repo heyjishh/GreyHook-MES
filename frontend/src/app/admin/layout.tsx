@@ -6,21 +6,30 @@ import {
   LayoutGrid, Cpu, Users, Clock, Shield, Lock,
   ArrowLeft, ChevronRight, ExternalLink,
   Building2, Factory, GitBranch, LayoutList, Sparkles,
+  Target, AlertTriangle, Cable, Bell, KeyRound, Database, Globe, Settings2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV = [
-  { href: "/admin",          label: "Overview",     icon: LayoutGrid, section: "Console"  },
-  { href: "/admin/setup",    label: "Setup Wizard", icon: Sparkles,   section: "Setup"    },
-  { href: "/admin/business", label: "Business",     icon: Building2,  section: "Setup"    },
-  { href: "/admin/plants",   label: "Plants",       icon: Factory,    section: "Setup"    },
-  { href: "/admin/lines",    label: "Prod. Lines",  icon: GitBranch,  section: "Setup"    },
-  { href: "/admin/modules",  label: "Modules",      icon: LayoutList, section: "Setup"    },
-  { href: "/admin/machines", label: "Machines",     icon: Cpu,        section: "Config"   },
-  { href: "/admin/shifts",   label: "Shifts",       icon: Clock,      section: "Config"   },
-  { href: "/admin/users",    label: "Users",        icon: Users,      section: "Config"   },
-  { href: "/admin/rbac",     label: "Roles & Access", icon: Lock,     section: "Config"   },
-  { href: "/admin/security", label: "Security",     icon: Shield,     section: "Config"   },
+  { href: "/admin",                label: "Overview",        icon: LayoutGrid,   section: "Console"       },
+  { href: "/admin/setup",          label: "Setup Wizard",    icon: Sparkles,     section: "Setup"         },
+  { href: "/admin/business",       label: "Business",        icon: Building2,    section: "Setup"         },
+  { href: "/admin/plants",         label: "Plants",          icon: Factory,      section: "Setup"         },
+  { href: "/admin/lines",          label: "Prod. Lines",     icon: GitBranch,    section: "Setup"         },
+  { href: "/admin/modules",        label: "Modules",         icon: LayoutList,   section: "Setup"         },
+  { href: "/admin/machines",       label: "Machines",        icon: Cpu,          section: "Operations"    },
+  { href: "/admin/shifts",         label: "Shifts",          icon: Clock,        section: "Operations"    },
+  { href: "/admin/oee-targets",    label: "OEE Targets",     icon: Target,       section: "Operations"    },
+  { href: "/admin/alerts",         label: "Alert Rules",     icon: AlertTriangle,section: "Operations"    },
+  { href: "/admin/users",          label: "Users",           icon: Users,        section: "Access"        },
+  { href: "/admin/rbac",           label: "Roles & Access",  icon: Lock,         section: "Access"        },
+  { href: "/admin/security",       label: "Security",        icon: Shield,       section: "Access"        },
+  { href: "/admin/erp-connectors", label: "ERP Connectors",  icon: Cable,        section: "Integrations"  },
+  { href: "/admin/notifications",  label: "Notifications",   icon: Bell,         section: "Integrations"  },
+  { href: "/admin/api-keys",       label: "API Keys",        icon: KeyRound,     section: "Integrations"  },
+  { href: "/admin/data-retention", label: "Data Retention",  icon: Database,     section: "Platform"      },
+  { href: "/admin/localization",   label: "Localisation",    icon: Globe,        section: "Platform"      },
+  { href: "/admin/advanced",       label: "Advanced",        icon: Settings2,    section: "Platform"      },
 ];
 
 function AdminSidebar({ pathname }: { pathname: string }) {
@@ -50,7 +59,7 @@ function AdminSidebar({ pathname }: { pathname: string }) {
           return (
             <div key={href}>
               {showSection && (
-                <p className="px-3 pt-3 pb-1 font-mono text-2xs text-white/30 uppercase tracking-widest">
+                <p className="px-3 pt-3 pb-1 font-mono text-2xs text-white/50 uppercase tracking-widest">
                   {section}
                 </p>
               )}
@@ -60,7 +69,7 @@ function AdminSidebar({ pathname }: { pathname: string }) {
                   "flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-sans font-medium transition-all",
                   isActive
                     ? "bg-[#F05230]/15 text-[#F05230] font-semibold"
-                    : "text-white/50 hover:text-white/90 hover:bg-white/6"
+                    : "text-white/70 hover:text-white hover:bg-white/10"
                 )}
               >
                 <Icon size={13} className="shrink-0" />
