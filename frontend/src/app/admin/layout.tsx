@@ -2,88 +2,225 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useState, useEffect } from "react";
 import {
   LayoutGrid, Cpu, Users, Clock, Shield, Lock,
-  ArrowLeft, ChevronRight, ExternalLink,
+  ArrowLeft, ChevronRight, ChevronDown, ExternalLink,
   Building2, Factory, GitBranch, LayoutList, Sparkles,
   Target, AlertTriangle, Cable, Bell, KeyRound, Database, Globe, Settings2,
+  Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const NAV = [
-  { href: "/admin",                label: "Overview",        icon: LayoutGrid,   section: "Console"       },
-  { href: "/admin/setup",          label: "Setup Wizard",    icon: Sparkles,     section: "Setup"         },
-  { href: "/admin/business",       label: "Business",        icon: Building2,    section: "Setup"         },
-  { href: "/admin/plants",         label: "Plants",          icon: Factory,      section: "Setup"         },
-  { href: "/admin/lines",          label: "Prod. Lines",     icon: GitBranch,    section: "Setup"         },
-  { href: "/admin/modules",        label: "Modules",         icon: LayoutList,   section: "Setup"         },
-  { href: "/admin/machines",       label: "Machines",        icon: Cpu,          section: "Operations"    },
-  { href: "/admin/shifts",         label: "Shifts",          icon: Clock,        section: "Operations"    },
-  { href: "/admin/oee-targets",    label: "OEE Targets",     icon: Target,       section: "Operations"    },
-  { href: "/admin/alerts",         label: "Alert Rules",     icon: AlertTriangle,section: "Operations"    },
-  { href: "/admin/users",          label: "Users",           icon: Users,        section: "Access"        },
-  { href: "/admin/rbac",           label: "Roles & Access",  icon: Lock,         section: "Access"        },
-  { href: "/admin/security",       label: "Security",        icon: Shield,       section: "Access"        },
-  { href: "/admin/erp-connectors", label: "ERP Connectors",  icon: Cable,        section: "Integrations"  },
-  { href: "/admin/notifications",  label: "Notifications",   icon: Bell,         section: "Integrations"  },
-  { href: "/admin/api-keys",       label: "API Keys",        icon: KeyRound,     section: "Integrations"  },
-  { href: "/admin/data-retention", label: "Data Retention",  icon: Database,     section: "Platform"      },
-  { href: "/admin/localization",   label: "Localisation",    icon: Globe,        section: "Platform"      },
-  { href: "/admin/advanced",       label: "Advanced",        icon: Settings2,    section: "Platform"      },
+interface NavItem {
+  href: string;
+  label: string;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+}
+
+interface NavSection {
+  id: string;
+  label: string;
+  icon: React.ComponentType<{ size?: number; className?: string }>;
+  color: string;
+  items: NavItem[];
+}
+
+const SECTIONS: NavSection[] = [
+  {
+    id: "console",
+    label: "Console",
+    icon: LayoutGrid,
+    color: "text-[#F05230]",
+    items: [
+      { href: "/admin", label: "Overview", icon: LayoutGrid },
+    ],
+  },
+  {
+    id: "setup",
+    label: "Setup",
+    icon: Sparkles,
+    color: "text-violet-400",
+    items: [
+      { href: "/admin/setup",    label: "Setup Wizard",    icon: Sparkles   },
+      { href: "/admin/business", label: "Business",        icon: Building2  },
+      { href: "/admin/plants",   label: "Plants",          icon: Factory    },
+      { href: "/admin/lines",    label: "Production Lines",icon: GitBranch  },
+      { href: "/admin/modules",  label: "Module Catalog",  icon: LayoutList },
+    ],
+  },
+  {
+    id: "operations",
+    label: "Operations",
+    icon: Zap,
+    color: "text-amber-400",
+    items: [
+      { href: "/admin/machines",    label: "Machines",        icon: Cpu          },
+      { href: "/admin/shifts",      label: "Shifts",          icon: Clock        },
+      { href: "/admin/oee-targets", label: "OEE Targets",     icon: Target       },
+      { href: "/admin/alerts",      label: "Alert Rules",     icon: AlertTriangle},
+    ],
+  },
+  {
+    id: "access",
+    label: "Access",
+    icon: Lock,
+    color: "text-emerald-400",
+    items: [
+      { href: "/admin/users",    label: "Users",          icon: Users  },
+      { href: "/admin/rbac",     label: "Roles & Perms",  icon: Lock   },
+      { href: "/admin/security", label: "Security",       icon: Shield },
+    ],
+  },
+  {
+    id: "integrations",
+    label: "Integrations",
+    icon: Cable,
+    color: "text-sky-400",
+    items: [
+      { href: "/admin/erp-connectors", label: "ERP Connectors", icon: Cable    },
+      { href: "/admin/notifications",  label: "Notifications",  icon: Bell     },
+      { href: "/admin/api-keys",       label: "API Keys",       icon: KeyRound },
+    ],
+  },
+  {
+    id: "platform",
+    label: "Platform",
+    icon: Settings2,
+    color: "text-slate-400",
+    items: [
+      { href: "/admin/data-retention", label: "Data Retention", icon: Database  },
+      { href: "/admin/localization",   label: "Localisation",   icon: Globe     },
+      { href: "/admin/advanced",       label: "Advanced",       icon: Settings2 },
+    ],
+  },
 ];
 
+function findActiveSection(pathname: string): string {
+  for (const section of SECTIONS) {
+    for (const item of section.items) {
+      const isActive = item.href === "/admin" ? pathname === "/admin" : pathname.startsWith(item.href);
+      if (isActive) return section.id;
+    }
+  }
+  return "console";
+}
+
 function AdminSidebar({ pathname }: { pathname: string }) {
+  const activeSectionId = findActiveSection(pathname);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>(() => {
+    const init: Record<string, boolean> = {};
+    SECTIONS.forEach((s) => { init[s.id] = s.id === activeSectionId || s.id === "console"; });
+    return init;
+  });
+
+  useEffect(() => {
+    setExpanded((prev) => ({ ...prev, [activeSectionId]: true }));
+  }, [activeSectionId]);
+
+  const toggle = (id: string) => setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
+
   return (
-    <aside className="w-52 shrink-0 flex flex-col border-r border-[#E8E4DF] bg-[#040E36] min-h-screen">
+    <aside className="w-56 shrink-0 flex flex-col border-r border-white/8 bg-[#040E36] min-h-screen">
       {/* Logo + back */}
-      <div className="px-5 pt-5 pb-4 border-b border-white/8">
+      <div className="px-4 pt-5 pb-4 border-b border-white/8">
         <div className="flex items-center gap-2 mb-4">
-          <div className="w-4 h-4 rounded-sm bg-[#F05230] shrink-0" />
+          <div className="w-5 h-5 rounded bg-[#F05230] flex items-center justify-center shrink-0">
+            <span className="text-white font-black text-2xs tracking-tight">G</span>
+          </div>
           <span className="font-mono text-xs font-bold text-white tracking-widest uppercase">GreyHook</span>
         </div>
         <Link
           href="/dashboard"
-          className="inline-flex items-center gap-1.5 text-[#F05230] font-mono text-2xs hover:opacity-80 transition-opacity"
+          className="inline-flex items-center gap-1.5 text-white/40 font-mono text-2xs hover:text-white/70 transition-colors"
         >
           <ArrowLeft size={11} />
           <span>Back to Dashboard</span>
         </Link>
       </div>
 
-      {/* Nav */}
-      <nav className="flex-1 px-2 py-3 overflow-y-auto">
-        {NAV.map(({ href, label, icon: Icon, section }, idx) => {
-          const isActive = href === "/admin" ? pathname === "/admin" : pathname.startsWith(href);
-          const prevSection = idx > 0 ? NAV[idx - 1].section : null;
-          const showSection = section !== prevSection;
+      {/* Sections nav */}
+      <nav className="flex-1 py-3 overflow-y-auto">
+        {SECTIONS.map((section) => {
+          const SectionIcon = section.icon;
+          const isOpen = expanded[section.id];
+          const hasActive = section.items.some((item) =>
+            item.href === "/admin" ? pathname === "/admin" : pathname.startsWith(item.href)
+          );
+
+          if (section.id === "console") {
+            const item = section.items[0];
+            const isActive = pathname === "/admin";
+            return (
+              <div key={section.id} className="px-2 mb-1">
+                <Link
+                  href={item.href}
+                  className={cn(
+                    "flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all",
+                    isActive
+                      ? "bg-[#F05230]/15 text-[#F05230] font-semibold"
+                      : "text-white/60 hover:text-white hover:bg-white/8"
+                  )}
+                >
+                  <SectionIcon size={13} className="shrink-0" />
+                  Overview
+                </Link>
+              </div>
+            );
+          }
+
           return (
-            <div key={href}>
-              {showSection && (
-                <p className="px-3 pt-3 pb-1 font-mono text-2xs text-white/50 uppercase tracking-widest">
-                  {section}
-                </p>
-              )}
-              <Link
-                href={href}
+            <div key={section.id} className="px-2 mb-1">
+              {/* Section header / toggle */}
+              <button
+                onClick={() => toggle(section.id)}
                 className={cn(
-                  "flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-sans font-medium transition-all",
-                  isActive
-                    ? "bg-[#F05230]/15 text-[#F05230] font-semibold"
-                    : "text-white/70 hover:text-white hover:bg-white/10"
+                  "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition-all group",
+                  hasActive
+                    ? "text-white"
+                    : "text-white/50 hover:text-white/80 hover:bg-white/5"
                 )}
               >
-                <Icon size={13} className="shrink-0" />
-                {label}
-              </Link>
+                <SectionIcon size={13} className={cn("shrink-0 transition-colors", hasActive ? section.color : "text-white/30 group-hover:text-white/50")} />
+                <span className="flex-1 text-left font-mono uppercase tracking-wider text-2xs">{section.label}</span>
+                {isOpen
+                  ? <ChevronDown size={11} className="text-white/30" />
+                  : <ChevronRight size={11} className="text-white/30" />
+                }
+              </button>
+
+              {/* Items */}
+              {isOpen && (
+                <div className="mt-0.5 ml-3 pl-3 border-l border-white/8 space-y-0.5">
+                  {section.items.map((item) => {
+                    const Icon = item.icon;
+                    const isActive = item.href === "/admin" ? pathname === "/admin" : pathname.startsWith(item.href);
+                    return (
+                      <Link
+                        key={item.href}
+                        href={item.href}
+                        className={cn(
+                          "flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs transition-all",
+                          isActive
+                            ? "bg-[#F05230]/15 text-[#F05230] font-semibold"
+                            : "text-white/55 hover:text-white hover:bg-white/8"
+                        )}
+                      >
+                        <Icon size={12} className="shrink-0" />
+                        {item.label}
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           );
         })}
       </nav>
 
       {/* Footer */}
-      <div className="px-5 py-4 border-t border-white/8">
-        <p className="font-mono text-2xs text-white/30">Admin Console</p>
-        <p className="font-mono text-2xs text-white/20 mt-0.5">v2.1.0 · GreyHook MES</p>
+      <div className="px-4 py-4 border-t border-white/8">
+        <p className="font-mono text-2xs text-white/25">Admin Console · v2.1.0</p>
       </div>
     </aside>
   );
@@ -92,8 +229,17 @@ function AdminSidebar({ pathname }: { pathname: string }) {
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
+  const activeSection = SECTIONS.find((s) =>
+    s.items.some((item) =>
+      item.href === "/admin" ? pathname === "/admin" : pathname.startsWith(item.href)
+    )
+  );
+  const activeItem = SECTIONS.flatMap((s) => s.items).find((item) =>
+    item.href === "/admin" ? pathname === "/admin" : pathname.startsWith(item.href)
+  );
+
   return (
-    <div className="flex min-h-screen bg-[#FAFAF8]">
+    <div className="flex min-h-screen bg-[#F5F4F1]">
       <AdminSidebar pathname={pathname} />
 
       <div className="flex flex-col flex-1 min-w-0">
@@ -101,12 +247,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <header className="flex items-center justify-between px-6 py-3 bg-white border-b border-[#E8E4DF] shrink-0">
           <div className="flex items-center gap-2 font-mono text-2xs text-[#6A8A9A]">
             <Link href="/admin" className="hover:text-[#001C2E] transition-colors">Admin</Link>
-            {pathname !== "/admin" && (
+            {activeSection && activeSection.id !== "console" && (
               <>
                 <ChevronRight size={11} />
-                <span className="text-[#001C2E] capitalize">
-                  {pathname.split("/admin/")[1] ?? ""}
-                </span>
+                <span className="text-[#6A8A9A]">{activeSection.label}</span>
+              </>
+            )}
+            {activeItem && activeItem.href !== "/admin" && (
+              <>
+                <ChevronRight size={11} />
+                <span className="text-[#001C2E] font-semibold">{activeItem.label}</span>
               </>
             )}
           </div>
