@@ -1,4 +1,5 @@
 from app.models.ai import AIInvestigation
+from app.models.module import OrganizationModule
 from app.models.audit import AuditLog, KafkaConsumerCheckpoint
 from app.models.downtime import DowntimeEvent
 from app.models.factory import Factory, ProductionLine
@@ -14,6 +15,7 @@ from app.models.user import RefreshToken, User
 
 __all__ = [
     "AIInvestigation",
+    "OrganizationModule",
     "AuditLog",
     "DowntimeEvent",
     "ERPMaterial",

@@ -50,6 +50,54 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/auth";
+import { useModulesStore } from "@/store/modules";
+import { useOrgModules } from "@/hooks/useOrgModules";
+
+const NAV_MODULE_ID: Record<string, string> = {
+  "/dashboard":                               "overview",
+  "/dashboard/production":                    "production",
+  "/dashboard/oee":                           "oee",
+  "/dashboard/downtime":                      "downtime",
+  "/dashboard/ai":                            "ai",
+  "/dashboard/analytics":                     "analytics",
+  "/dashboard/workorders":                    "workorders",
+  "/dashboard/quality":                       "quality",
+  "/dashboard/reports":                       "reports",
+  "/dashboard/traceability":                  "traceability",
+  "/dashboard/ncm":                           "ncm",
+  "/dashboard/workorders/PO-2026-11-001":     "instructions",
+  "/dashboard/maintenance":                   "maintenance",
+  "/dashboard/bom":                           "bom",
+  "/dashboard/operator":                      "operator",
+  "/dashboard/spc":                           "spc",
+  "/dashboard/scheduling":                    "scheduling",
+  "/dashboard/shift-handover":                "shift_handover",
+  "/dashboard/yield":                         "yield",
+  "/dashboard/golden-batch":                  "golden_batch",
+  "/dashboard/quality/inspections":           "inspections",
+  "/dashboard/labor":                         "labor",
+  "/dashboard/inventory":                     "inventory",
+  "/dashboard/recipes":                       "recipes",
+  "/dashboard/ebr":                           "ebr",
+  "/dashboard/capa":                          "capa",
+  "/dashboard/energy":                        "energy",
+  "/dashboard/documents":                     "documents",
+  "/dashboard/erp-sync":                      "erp_sync",
+  "/dashboard/andon":                         "andon",
+  "/dashboard/tooling":                       "tooling",
+  "/dashboard/genealogy":                     "genealogy",
+  "/dashboard/calibration":                   "calibration",
+  "/dashboard/supplier-quality":              "supplier_quality",
+  "/dashboard/line-balance":                  "line_balance",
+  "/dashboard/enterprise":                    "enterprise",
+  "/dashboard/plant-benchmarking":            "benchmarking",
+  "/dashboard/global-compliance":             "compliance",
+  "/dashboard/recipe-library":               "recipe_library",
+  "/dashboard/wip-transfer":                  "wip_transfer",
+  "/dashboard/enterprise-scheduling":         "ent_scheduling",
+  "/dashboard/finance":                       "finance",
+  "/dashboard/procurement":                   "procurement",
+};
 
 interface NavItem {
   href: string;
@@ -195,10 +243,16 @@ function SidebarContent({
 export function Sidebar({ mobileOpen = false, onClose }: SidebarProps) {
   const pathname = usePathname();
   const user = useAuthStore((s) => s.user);
+  const { enabledIds } = useModulesStore();
+  useOrgModules();
 
-  const visible = NAV_ITEMS.filter(
-    (item) => !item.adminOnly || user?.role === "admin"
-  );
+  const visible = NAV_ITEMS.filter((item) => {
+    if (item.adminOnly && user?.role !== "admin") return false;
+    if (!enabledIds) return true;
+    const moduleId = NAV_MODULE_ID[item.href];
+    if (!moduleId) return true;
+    return enabledIds.has(moduleId);
+  });
 
   return (
     <>

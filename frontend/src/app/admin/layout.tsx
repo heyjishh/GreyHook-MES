@@ -4,17 +4,23 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutGrid, Cpu, Users, Clock, Shield, Lock,
-  ArrowLeft, ChevronRight, ExternalLink, IndianRupee, ShoppingCart,
+  ArrowLeft, ChevronRight, ExternalLink,
+  Building2, Factory, GitBranch, LayoutList, Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV = [
-  { href: "/admin",          label: "Overview",  icon: LayoutGrid },
-  { href: "/admin/machines", label: "Machines",  icon: Cpu        },
-  { href: "/admin/shifts",   label: "Shifts",    icon: Clock      },
-  { href: "/admin/users",    label: "Users",     icon: Users      },
-  { href: "/admin/rbac",     label: "Roles & Access", icon: Lock  },
-  { href: "/admin/security", label: "Security",  icon: Shield     },
+  { href: "/admin",          label: "Overview",     icon: LayoutGrid, section: "Console"  },
+  { href: "/admin/setup",    label: "Setup Wizard", icon: Sparkles,   section: "Setup"    },
+  { href: "/admin/business", label: "Business",     icon: Building2,  section: "Setup"    },
+  { href: "/admin/plants",   label: "Plants",       icon: Factory,    section: "Setup"    },
+  { href: "/admin/lines",    label: "Prod. Lines",  icon: GitBranch,  section: "Setup"    },
+  { href: "/admin/modules",  label: "Modules",      icon: LayoutList, section: "Setup"    },
+  { href: "/admin/machines", label: "Machines",     icon: Cpu,        section: "Config"   },
+  { href: "/admin/shifts",   label: "Shifts",       icon: Clock,      section: "Config"   },
+  { href: "/admin/users",    label: "Users",        icon: Users,      section: "Config"   },
+  { href: "/admin/rbac",     label: "Roles & Access", icon: Lock,     section: "Config"   },
+  { href: "/admin/security", label: "Security",     icon: Shield,     section: "Config"   },
 ];
 
 function AdminSidebar({ pathname }: { pathname: string }) {
@@ -36,24 +42,31 @@ function AdminSidebar({ pathname }: { pathname: string }) {
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 px-2 py-3 space-y-px">
-        <p className="px-3 pb-1.5 font-mono text-2xs text-white/30 uppercase tracking-widest">Console</p>
-        {NAV.map(({ href, label, icon: Icon }) => {
+      <nav className="flex-1 px-2 py-3 overflow-y-auto">
+        {NAV.map(({ href, label, icon: Icon, section }, idx) => {
           const isActive = href === "/admin" ? pathname === "/admin" : pathname.startsWith(href);
+          const prevSection = idx > 0 ? NAV[idx - 1].section : null;
+          const showSection = section !== prevSection;
           return (
-            <Link
-              key={href}
-              href={href}
-              className={cn(
-                "flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-sans font-medium transition-all",
-                isActive
-                  ? "bg-[#F05230]/15 text-[#F05230] font-semibold"
-                  : "text-white/50 hover:text-white/90 hover:bg-white/6"
+            <div key={href}>
+              {showSection && (
+                <p className="px-3 pt-3 pb-1 font-mono text-2xs text-white/30 uppercase tracking-widest">
+                  {section}
+                </p>
               )}
-            >
-              <Icon size={13} className="shrink-0" />
-              {label}
-            </Link>
+              <Link
+                href={href}
+                className={cn(
+                  "flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-sans font-medium transition-all",
+                  isActive
+                    ? "bg-[#F05230]/15 text-[#F05230] font-semibold"
+                    : "text-white/50 hover:text-white/90 hover:bg-white/6"
+                )}
+              >
+                <Icon size={13} className="shrink-0" />
+                {label}
+              </Link>
+            </div>
           );
         })}
       </nav>

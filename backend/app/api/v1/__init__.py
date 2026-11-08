@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.v1 import ai, auth, downtime, factories, health, integrations, machines, oee, production, shifts, sse, users
+from app.api.v1 import ai, auth, downtime, factories, health, integrations, machines, modules, oee, production, shifts, sse, users
 
 router = APIRouter()
 
@@ -16,3 +16,4 @@ router.include_router(oee.router, tags=["oee"])
 router.include_router(sse.router, prefix="/sse", tags=["sse"])
 router.include_router(ai.router, tags=["ai"])
 router.include_router(integrations.router)
+router.include_router(modules.router)

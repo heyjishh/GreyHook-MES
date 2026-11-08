@@ -9,6 +9,8 @@ from app.integrations.connectors.sap.client import SAPODataClient
 _MM_STOCK_PATH = "/sap/opu/odata4/sap/api_material_stock/srvd_a2x/sap/materialstock/0001/MatlStkInAcctMod"
 _MM_MATERIAL_PATH = "/sap/opu/odata/sap/API_PRODUCT_SRV/A_Product"
 _MM_GR_PATH = "/sap/opu/odata4/sap/api_goodsmvt/srvd_a2x/sap/goodsmvt/0001/GoodsMovement"
+_BOM_HEADER_PATH = "/sap/opu/odata4/sap/api_bill_of_material/srvd_a2x/sap/billofmaterial/0001/BillOfMaterialHeader"
+_BOM_ITEM_PATH = "/sap/opu/odata4/sap/api_bill_of_material/srvd_a2x/sap/billofmaterial/0001/BillOfMaterialItem"
 
 
 class SAPMMConnector(BaseConnector):
@@ -85,6 +87,52 @@ class SAPMMConnector(BaseConnector):
             direction="mes_to_erp",
             status="success" if errors == 0 else "partial",
             records_fetched=len(records),
+            records_written=written,
+            error_count=errors,
+            duration_ms=self._elapsed_ms(start),
+        )
+
+    async def push_bom(self, bom_records: list[dict[str, Any]]) -> SyncResult:
+        start = self._start_timer()
+        written = 0
+        errors = 0
+        for bom in bom_records:
+            try:
+                header_payload = {
+                    "BillOfMaterialVariant": bom.get("bom_variant", "1"),
+                    "BillOfMaterialType": bom.get("bom_type", "M"),
+                    "Material": bom["material"],
+                    "Plant": bom.get("plant", self._config.sap_plant),
+                    "BillOfMaterialVariantUsage": bom.get("usage", "1"),
+                    "BaseQuantity": str(bom.get("base_qty", 1)),
+                    "BaseUnit": bom.get("base_unit", "EA"),
+                }
+                header_res = await self._client.post(_BOM_HEADER_PATH, header_payload)
+                bom_no = header_res.get("BillOfMaterial", "")
+
+                for item in bom.get("items", []):
+                    item_payload = {
+                        "BillOfMaterial": bom_no,
+                        "BillOfMaterialCategory": "M",
+                        "BillOfMaterialVariant": bom.get("bom_variant", "1"),
+                        "BillOfMaterialItemNodeNumber": item.get("node_no"),
+                        "ComponentScrapInPercent": str(item.get("scrap_pct", 0)),
+                        "BOMItemDescription": item.get("description", ""),
+                        "BillOfMaterialComponent": item["component"],
+                        "ComponentQuantity": str(item.get("qty", 1)),
+                        "ComponentUnit": item.get("unit", "EA"),
+                    }
+                    await self._client.post(_BOM_ITEM_PATH, item_payload)
+
+                written += 1
+            except Exception:
+                errors += 1
+
+        return SyncResult(
+            module=self.MODULE_ID,
+            direction="mes_to_erp",
+            status="success" if errors == 0 else "partial",
+            records_fetched=len(bom_records),
             records_written=written,
             error_count=errors,
             duration_ms=self._elapsed_ms(start),

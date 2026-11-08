@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_db
 from app.integrations.base import ConnectorConfig
+from app.integrations.connectors.sap.mm import SAPMMConnector
 from app.integrations.registry import available_modules, build_all_connectors, build_connector, MODULE_METADATA
 from app.models.integration import (
     ERPMaterial,
@@ -19,6 +20,7 @@ from app.models.integration import (
     IntegrationSyncLog,
 )
 from app.models.user import User
+from pydantic import BaseModel
 from app.schemas.integration import (
     ConnectivityTestResult,
     ConnectorCreate,
@@ -31,6 +33,10 @@ from app.schemas.integration import (
     SyncLogOut,
     SyncRequest,
 )
+
+
+class BOMPushRequest(BaseModel):
+    bom_records: list[dict]
 
 router = APIRouter(prefix="/integrations", tags=["integrations"])
 
@@ -449,3 +455,56 @@ async def connector_health(
         overall_status=overall_status,
         modules=module_health,
     )
+
+
+@router.post("/{connector_id}/push-bom", response_model=SyncLogOut)
+async def push_bom_to_sap(
+    connector_id: uuid.UUID,
+    body: BOMPushRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role not in ("admin", "supervisor"):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin or supervisor required")
+
+    result = await db.execute(
+        select(IntegrationConnector).where(
+            IntegrationConnector.id == connector_id,
+            IntegrationConnector.organization_id == current_user.organization_id,
+            IntegrationConnector.system_type == "SAP",
+            IntegrationConnector.is_active == True,
+        )
+    )
+    connector = result.scalar_one_or_none()
+    if not connector:
+        raise HTTPException(status_code=404, detail="Active SAP connector not found")
+
+    config = _build_config(connector)
+    mm_conn = SAPMMConnector(config)
+
+    log = IntegrationSyncLog(
+        connector_id=connector.id,
+        module="MM",
+        direction="mes_to_erp",
+        status="running",
+    )
+    db.add(log)
+    await db.flush()
+
+    try:
+        sync_result = await mm_conn.push_bom(body.bom_records)
+        log.status = sync_result.status
+        log.records_fetched = sync_result.records_fetched
+        log.records_written = sync_result.records_written
+        log.error_count = sync_result.error_count
+        log.error_detail = sync_result.error_detail
+        log.finished_at = datetime.now(UTC)
+    except Exception as exc:
+        log.status = "error"
+        log.error_count = 1
+        log.error_detail = str(exc)
+        log.finished_at = datetime.now(UTC)
+
+    await db.commit()
+    await db.refresh(log)
+    return log
