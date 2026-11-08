@@ -2,10 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, useEffect } from "react";
 import {
   LayoutGrid, Cpu, Users, Clock, Shield, Lock,
-  ArrowLeft, ChevronRight, ChevronDown, ExternalLink,
+  ArrowLeft, ChevronRight, ExternalLink,
   Building2, Factory, GitBranch, LayoutList, Sparkles,
   Target, AlertTriangle, Cable, Bell, KeyRound, Database, Globe, Settings2,
   Zap,
@@ -96,30 +95,7 @@ const SECTIONS: NavSection[] = [
   },
 ];
 
-function findActiveSection(pathname: string): string {
-  for (const section of SECTIONS) {
-    for (const item of section.items) {
-      const isActive = item.href === "/admin" ? pathname === "/admin" : pathname.startsWith(item.href);
-      if (isActive) return section.id;
-    }
-  }
-  return "console";
-}
-
 function AdminSidebar({ pathname }: { pathname: string }) {
-  const activeSectionId = findActiveSection(pathname);
-  const [expanded, setExpanded] = useState<Record<string, boolean>>(() => {
-    const init: Record<string, boolean> = {};
-    SECTIONS.forEach((s) => { init[s.id] = s.id === activeSectionId || s.id === "console"; });
-    return init;
-  });
-
-  useEffect(() => {
-    setExpanded((prev) => ({ ...prev, [activeSectionId]: true }));
-  }, [activeSectionId]);
-
-  const toggle = (id: string) => setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
-
   return (
     <aside className="w-56 shrink-0 flex flex-col border-r border-white/8 bg-[#040E36] min-h-screen">
       {/* Logo + back */}
@@ -132,35 +108,33 @@ function AdminSidebar({ pathname }: { pathname: string }) {
         </div>
         <Link
           href="/dashboard"
-          className="inline-flex items-center gap-1.5 text-white/40 font-mono text-2xs hover:text-white/70 transition-colors"
+          className="inline-flex items-center gap-1.5 font-mono text-2xs transition-colors hover:opacity-100"
+          style={{ color: "#6A8ABB" }}
         >
           <ArrowLeft size={11} />
           <span>Back to Dashboard</span>
         </Link>
       </div>
 
-      {/* Sections nav */}
-      <nav className="flex-1 py-3 overflow-y-auto">
+      {/* Nav — always expanded, section headers as labels */}
+      <nav className="flex-1 py-3 overflow-y-auto space-y-1">
         {SECTIONS.map((section) => {
           const SectionIcon = section.icon;
-          const isOpen = expanded[section.id];
-          const hasActive = section.items.some((item) =>
-            item.href === "/admin" ? pathname === "/admin" : pathname.startsWith(item.href)
-          );
 
           if (section.id === "console") {
             const item = section.items[0];
             const isActive = pathname === "/admin";
             return (
-              <div key={section.id} className="px-2 mb-1">
+              <div key={section.id} className="px-2">
                 <Link
                   href={item.href}
                   className={cn(
                     "flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all",
                     isActive
                       ? "bg-[#F05230]/15 text-[#F05230] font-semibold"
-                      : "text-white/60 hover:text-white hover:bg-white/8"
+                      : "hover:bg-[#162454]"
                   )}
+                  style={isActive ? {} : { color: "#B8CCDF" }}
                 >
                   <SectionIcon size={13} className="shrink-0" />
                   Overview
@@ -170,49 +144,37 @@ function AdminSidebar({ pathname }: { pathname: string }) {
           }
 
           return (
-            <div key={section.id} className="px-2 mb-1">
-              {/* Section header / toggle */}
-              <button
-                onClick={() => toggle(section.id)}
-                className={cn(
-                  "w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-semibold transition-all group",
-                  hasActive
-                    ? "text-white"
-                    : "text-white/50 hover:text-white/80 hover:bg-white/5"
-                )}
-              >
-                <SectionIcon size={13} className={cn("shrink-0 transition-colors", hasActive ? section.color : "text-white/30 group-hover:text-white/50")} />
-                <span className="flex-1 text-left font-mono uppercase tracking-wider text-2xs">{section.label}</span>
-                {isOpen
-                  ? <ChevronDown size={11} className="text-white/30" />
-                  : <ChevronRight size={11} className="text-white/30" />
-                }
-              </button>
-
+            <div key={section.id} className="px-2">
+              {/* Section label */}
+              <div className="flex items-center gap-2 px-3 pt-4 pb-1.5">
+                <SectionIcon size={11} className={cn("shrink-0", section.color)} />
+                <span className="font-mono text-2xs font-bold uppercase tracking-widest" style={{ color: "#6A8ABB" }}>{section.label}</span>
+              </div>
               {/* Items */}
-              {isOpen && (
-                <div className="mt-0.5 ml-3 pl-3 border-l border-white/8 space-y-0.5">
-                  {section.items.map((item) => {
-                    const Icon = item.icon;
-                    const isActive = item.href === "/admin" ? pathname === "/admin" : pathname.startsWith(item.href);
-                    return (
-                      <Link
-                        key={item.href}
-                        href={item.href}
-                        className={cn(
-                          "flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs transition-all",
-                          isActive
-                            ? "bg-[#F05230]/15 text-[#F05230] font-semibold"
-                            : "text-white/55 hover:text-white hover:bg-white/8"
-                        )}
-                      >
-                        <Icon size={12} className="shrink-0" />
-                        {item.label}
-                      </Link>
-                    );
-                  })}
-                </div>
-              )}
+              <div className="space-y-0.5">
+                {section.items.map((item) => {
+                  const Icon = item.icon;
+                  const isActive = item.href === "/admin"
+                    ? pathname === "/admin"
+                    : pathname.startsWith(item.href);
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className={cn(
+                        "flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs transition-all",
+                        isActive
+                          ? "bg-[#F05230]/15 text-[#F05230] font-semibold"
+                          : "hover:bg-[#162454]"
+                      )}
+                      style={isActive ? {} : { color: "#B8CCDF" }}
+                    >
+                      <Icon size={13} className="shrink-0" />
+                      {item.label}
+                    </Link>
+                  );
+                })}
+              </div>
             </div>
           );
         })}
