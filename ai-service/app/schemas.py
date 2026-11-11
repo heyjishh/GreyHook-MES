@@ -9,6 +9,8 @@ class InvestigationRequest(BaseModel):
     from_time: str
     to_time: str
     model_id: str = "claude-sonnet-4-6"
+    model_provider: str = "anthropic"
+    api_key: str | None = None
     created_at: str
 
 

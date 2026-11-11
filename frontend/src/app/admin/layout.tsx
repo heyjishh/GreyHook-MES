@@ -7,7 +7,7 @@ import {
   ArrowLeft, ChevronRight, ExternalLink,
   Building2, Factory, GitBranch, LayoutList, Sparkles,
   Target, AlertTriangle, Cable, Bell, KeyRound, Database, Globe, Settings2,
-  Zap,
+  Zap, BrainCircuit,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -77,9 +77,10 @@ const SECTIONS: NavSection[] = [
     icon: Cable,
     color: "text-sky-400",
     items: [
-      { href: "/admin/erp-connectors", label: "ERP Connectors", icon: Cable    },
-      { href: "/admin/notifications",  label: "Notifications",  icon: Bell     },
-      { href: "/admin/api-keys",       label: "API Keys",       icon: KeyRound },
+      { href: "/admin/erp-connectors", label: "ERP Connectors", icon: Cable        },
+      { href: "/admin/notifications",  label: "Notifications",  icon: Bell         },
+      { href: "/admin/api-keys",       label: "API Keys",       icon: KeyRound     },
+      { href: "/admin/ai-settings",    label: "AI Providers",   icon: BrainCircuit },
     ],
   },
   {

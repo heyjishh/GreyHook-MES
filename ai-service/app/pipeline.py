@@ -5,7 +5,7 @@ from haystack.components.embedders import (
     SentenceTransformersDocumentEmbedder,
     SentenceTransformersTextEmbedder,
 )
-from haystack.components.generators.chat import AnthropicChatGenerator
+from haystack.components.generators.chat import AnthropicChatGenerator, OpenAIChatGenerator
 from haystack.components.retrievers.in_memory import InMemoryEmbeddingRetriever
 from haystack.components.writers import DocumentWriter
 from haystack.dataclasses import ChatMessage
@@ -30,12 +30,46 @@ _TEMPLATE = [
 
 _EMBED_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
+_GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
+_XAI_BASE_URL = "https://api.x.ai/v1"
+
+
+def _make_generator(api_key: str, model_id: str, model_provider: str):
+    if model_provider == "anthropic":
+        return AnthropicChatGenerator(
+            api_key=Secret.from_token(api_key),
+            model=model_id,
+        )
+    elif model_provider == "openai":
+        return OpenAIChatGenerator(
+            api_key=Secret.from_token(api_key),
+            model=model_id,
+        )
+    elif model_provider == "gemini":
+        return OpenAIChatGenerator(
+            api_key=Secret.from_token(api_key),
+            model=model_id,
+            api_base_url=_GEMINI_BASE_URL,
+        )
+    elif model_provider == "xai":
+        return OpenAIChatGenerator(
+            api_key=Secret.from_token(api_key),
+            model=model_id,
+            api_base_url=_XAI_BASE_URL,
+        )
+    else:
+        raise ValueError(f"Unsupported model provider: {model_provider}")
+
 
 class InvestigationPipeline:
-    def __init__(self, anthropic_api_key: str):
-        self._api_key = anthropic_api_key
-
-    def run(self, question: str, documents: list[Document]) -> dict:
+    def run(
+        self,
+        question: str,
+        documents: list[Document],
+        api_key: str,
+        model_id: str = "claude-sonnet-4-6",
+        model_provider: str = "anthropic",
+    ) -> dict:
         if not documents:
             documents = [Document(
                 content="No factory data available for the requested time window.",
@@ -56,13 +90,7 @@ class InvestigationPipeline:
             "retriever", InMemoryEmbeddingRetriever(document_store=doc_store, top_k=10)
         )
         query_pipeline.add_component("prompt_builder", ChatPromptBuilder(template=_TEMPLATE))
-        query_pipeline.add_component(
-            "llm",
-            AnthropicChatGenerator(
-                api_key=Secret.from_token(self._api_key),
-                model="claude-sonnet-4-6",
-            ),
-        )
+        query_pipeline.add_component("llm", _make_generator(api_key, model_id, model_provider))
         query_pipeline.connect("text_embedder.embedding", "retriever.query_embedding")
         query_pipeline.connect("retriever.documents", "prompt_builder.documents")
         query_pipeline.connect("prompt_builder.prompt", "llm.messages")

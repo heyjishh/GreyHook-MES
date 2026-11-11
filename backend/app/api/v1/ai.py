@@ -67,8 +67,23 @@ async def create_investigation(
 
     from app.core.config import get_settings as _get_settings
     from app.kafka_producer import publish
+    from app.models.org_llm_config import OrgLLMConfig
+    from app.api.v1.llm_configs import _decrypt
 
     _cfg = _get_settings()
+
+    _llm_result = await db.execute(
+        select(OrgLLMConfig).where(
+            OrgLLMConfig.organization_id == current_user.organization_id,
+            OrgLLMConfig.is_active.is_(True),
+            OrgLLMConfig.api_key_encrypted.isnot(None),
+        )
+    )
+    _llm_cfg = _llm_result.scalar_one_or_none()
+    _api_key = _decrypt(_llm_cfg.api_key_encrypted) if _llm_cfg else _cfg.anthropic_api_key
+    _model_id = _llm_cfg.model_id if _llm_cfg else "claude-sonnet-4-6"
+    _provider = _llm_cfg.provider if _llm_cfg else "anthropic"
+
     await publish(
         topic=_cfg.kafka_ai_request_topic,
         payload={
@@ -78,7 +93,9 @@ async def create_investigation(
             "machine_id": context_data.get("machine_id"),
             "from_time": context_data["from"],
             "to_time": context_data["to"],
-            "model_id": "claude-sonnet-4-6",
+            "model_id": _model_id,
+            "model_provider": _provider,
+            "api_key": _api_key,
             "created_at": datetime.now(UTC).isoformat(),
         },
     )

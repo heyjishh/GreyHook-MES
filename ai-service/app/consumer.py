@@ -43,7 +43,7 @@ def _build_result(
 
 
 def run_consumer(settings: Settings) -> None:
-    pipeline = InvestigationPipeline(anthropic_api_key=settings.anthropic_api_key)
+    pipeline = InvestigationPipeline()
     producer = make_producer(settings.kafka_bootstrap_servers)
     logger.info("ai_service_starting", topic=settings.kafka_request_topic)
 
@@ -65,6 +65,9 @@ def run_consumer(settings: Settings) -> None:
         documents = []
         try:
             request = InvestigationRequest(**raw)
+            effective_key = request.api_key or settings.anthropic_api_key
+            if not effective_key:
+                raise ValueError("No API key configured for this investigation")
             documents = asyncio.run(
                 fetch_investigation_context(
                     postgres_dsn=settings.postgres_dsn,
@@ -73,7 +76,13 @@ def run_consumer(settings: Settings) -> None:
                     to_time_str=request.to_time,
                 )
             )
-            pipeline_result = pipeline.run(question=request.question, documents=documents)
+            pipeline_result = pipeline.run(
+                question=request.question,
+                documents=documents,
+                api_key=effective_key,
+                model_id=request.model_id,
+                model_provider=request.model_provider,
+            )
             result = _build_result(
                 request=request,
                 status="completed",
