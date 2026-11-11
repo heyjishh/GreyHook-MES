@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     environment: str = "development"
     log_level: str = "INFO"
 
+    opensearch_url: str = ""
+    keycloak_issuer_url: str = ""
+
     cors_origins: str = "http://localhost:3000"
 
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")

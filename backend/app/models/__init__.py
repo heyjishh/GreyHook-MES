@@ -1,4 +1,5 @@
 from app.models.ai import AIInvestigation
+from app.models.bom import BomLine, RoutingOperation
 from app.models.module import OrganizationModule
 from app.models.audit import AuditLog, KafkaConsumerCheckpoint
 from app.models.downtime import DowntimeEvent

@@ -236,6 +236,8 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       OTEL_SERVICE_NAME: greyhook-backend
+      OPENSEARCH_URL: ${OPENSEARCH_URL:-}
+      KEYCLOAK_ISSUER_URL: ${KEYCLOAK_ISSUER_URL:-}
     ports:
       - "8000:8000"
     depends_on:
@@ -313,6 +315,94 @@ services:
     profiles:
       - simulate
 
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0.7
+    command: start-dev --import-realm --http-port=8180
+    restart: unless-stopped
+    environment:
+      KC_DB: dev-mem
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-devpassword}
+    ports:
+      - "8180:8180"
+    volumes:
+      - ./infra/keycloak:/opt/keycloak/data/import:ro
+    profiles:
+      - sso
+
+  opensearch:
+    image: opensearchproject/opensearch:2.17.1
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      DISABLE_SECURITY_PLUGIN: "true"
+      OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
+      bootstrap.memory_lock: "true"
+    ports:
+      - "9200:9200"
+    volumes:
+      - opensearch_data:/usr/share/opensearch/data
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -q '\"status\":\"green\"\\|\"status\":\"yellow\"'"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+    profiles:
+      - search
+
+  opensearch-dashboards:
+    image: opensearchproject/opensearch-dashboards:2.17.1
+    restart: unless-stopped
+    environment:
+      OPENSEARCH_HOSTS: '["http://opensearch:9200"]'
+      DISABLE_SECURITY_DASHBOARDS_PLUGIN: "true"
+    ports:
+      - "5601:5601"
+    depends_on:
+      opensearch:
+        condition: service_healthy
+    profiles:
+      - search
+
+  opensearch-indexer:
+    build:
+      context: ./opensearch-indexer
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      OPENSEARCH_URL: http://opensearch:9200
+      CONSUMER_GROUP_ID: opensearch-indexer
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      redpanda-init:
+        condition: service_completed_successfully
+      opensearch:
+        condition: service_healthy
+    profiles:
+      - search
+
+  nodered:
+    image: nodered/node-red:4.0.5-18
+    restart: unless-stopped
+    ports:
+      - "1880:1880"
+    volumes:
+      - nodered_data:/data
+      - ./infra/node-red/flows.json:/data/flows.json:ro
+    environment:
+      TZ: Asia/Kolkata
+    profiles:
+      - integrations
+
 volumes:
   postgres_data:
   redpanda_data:
@@ -320,3 +410,5 @@ volumes:
   mosquitto_data:
   prometheus_data:
   grafana_data:
+  opensearch_data:
+  nodered_data:
