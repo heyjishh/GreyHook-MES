@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Clock, Plus, Edit2, Pause } from "lucide-react";
+import { InsightBanner } from "@/components/admin/InsightBanner";
 
 const T = {
   brand:     "#F05230",
@@ -81,6 +82,13 @@ export default function AdminShiftsPage() {
 
   return (
     <div className="space-y-5">
+
+      <InsightBanner
+        variant="warning"
+        title="Shifts are critical for OEE accuracy"
+        message="OEE Availability is calculated as actual production time ÷ planned production time (shifts). Without shift schedules, Availability will always show 100% and your OEE data will be misleading."
+        dismissible
+      />
 
       {/* Header */}
       <div className="flex items-center justify-between gap-4 flex-wrap">

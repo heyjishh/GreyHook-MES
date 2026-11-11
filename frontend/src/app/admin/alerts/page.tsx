@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { AlertTriangle, Save, RefreshCw, CheckCircle2, Bell, Mail, MessageSquare } from "lucide-react";
+import { InsightBanner } from "@/components/admin/InsightBanner";
 import { cn } from "@/lib/utils";
 
 interface AlertRule {
@@ -65,6 +66,15 @@ export default function AlertsPage() {
 
   return (
     <div className="space-y-6">
+      <InsightBanner
+        variant="warning"
+        title="Alert rules need notification channels to deliver"
+        message="Enabling an alert rule without a configured notification channel means no one gets notified. Set up email, Slack, or webhook destinations first so alerts actually reach your team."
+        actionLabel="Configure Notification Channels"
+        actionHref="/admin/notifications"
+        dismissible
+      />
+
       <div>
         <h1 className="text-xl font-bold text-[#001C2E] font-mono tracking-tight flex items-center gap-2">
           <AlertTriangle size={20} className="text-[#F05230]" />

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Cpu, Wifi, Radio, CheckCircle2, AlertCircle, XCircle, Plus, Settings, RefreshCw } from "lucide-react";
+import { InsightBanner } from "@/components/admin/InsightBanner";
 
 const T = {
   brand:     "#F05230",
@@ -107,6 +108,15 @@ export default function AdminMachinesPage() {
 
   return (
     <div className="space-y-5">
+
+      <InsightBanner
+        variant="info"
+        title="Machines must be assigned to a production line"
+        message="If you haven't created production lines yet, go to Admin → Production Lines first. Each machine needs a line so OEE is calculated at the right level."
+        actionLabel="Go to Production Lines"
+        actionHref="/admin/lines"
+        dismissible
+      />
 
       {/* Header */}
       <div className="flex items-center justify-between gap-4 flex-wrap">

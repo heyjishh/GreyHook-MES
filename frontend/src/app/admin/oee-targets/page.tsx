@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useAuthStore } from "@/store/auth";
 import { Target, RefreshCw, Save, CheckCircle2, Info } from "lucide-react";
+import { InsightBanner } from "@/components/admin/InsightBanner";
 import { cn } from "@/lib/utils";
 
 interface OEETarget {
@@ -57,6 +58,15 @@ export default function OEETargetsPage() {
 
   return (
     <div className="space-y-6">
+      <InsightBanner
+        variant="tip"
+        title="Industry benchmarks: Availability 90%, Performance 95%, Quality 99.7%"
+        message="World-class OEE is 85%+. Set realistic stretch targets — too aggressive and your team disengages, too low and you mask real losses. Start with your historical average and improve 2–3% per quarter."
+        actionLabel="Learn about OEE benchmarks"
+        actionHref="/admin/modules"
+        dismissible
+      />
+
       <div>
         <h1 className="text-xl font-bold text-[#001C2E] font-mono tracking-tight flex items-center gap-2">
           <Target size={20} className="text-[#F05230]" />
