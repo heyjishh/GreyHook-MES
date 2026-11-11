@@ -4,7 +4,7 @@ import os
 import random
 import sys
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, time, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -109,9 +109,9 @@ async def run(session: AsyncSession) -> None:
                "name": prod["name"], "cycle": prod["cycle"]})
 
     for shift in [
-        {"id": SHIFT_MORNING_ID,   "name": "Morning Shift",   "start": "06:00", "end": "14:00", "days": "{1,2,3,4,5,6}"},
-        {"id": SHIFT_AFTERNOON_ID, "name": "Afternoon Shift", "start": "14:00", "end": "22:00", "days": "{1,2,3,4,5,6}"},
-        {"id": SHIFT_NIGHT_ID,     "name": "Night Shift",     "start": "22:00", "end": "06:00", "days": "{1,2,3,4,5}"},
+        {"id": SHIFT_MORNING_ID,   "name": "Morning Shift",   "start": time(6, 0),  "end": time(14, 0), "days": [1,2,3,4,5,6]},
+        {"id": SHIFT_AFTERNOON_ID, "name": "Afternoon Shift", "start": time(14, 0), "end": time(22, 0), "days": [1,2,3,4,5,6]},
+        {"id": SHIFT_NIGHT_ID,     "name": "Night Shift",     "start": time(22, 0), "end": time(6, 0),  "days": [1,2,3,4,5]},
     ]:
         await session.execute(text("""
             INSERT INTO shifts
@@ -220,6 +220,7 @@ async def run(session: AsyncSession) -> None:
         """), {"id": str(u["id"]), "org": str(ORG_ID), "email": u["email"],
                "name": u["name"], "pw": hashed_pw, "role": u["role"]})
 
+    import json as _json
     alert_rules = [
         {
             "id": uuid.UUID("60000000-0000-0000-0000-000000000001"),
@@ -227,7 +228,7 @@ async def run(session: AsyncSession) -> None:
             "event_type": "oee_below_target",
             "threshold": 65.0,
             "channel_type": "email",
-            "channel_config": '{"recipients": ["admin@sunrise.com", "manager@sunrise.com"]}',
+            "channel_config": _json.dumps({"recipients": ["admin@sunrise.com", "manager@sunrise.com"]}),
         },
         {
             "id": uuid.UUID("60000000-0000-0000-0000-000000000002"),
@@ -235,7 +236,7 @@ async def run(session: AsyncSession) -> None:
             "event_type": "machine_fault",
             "threshold": 1.0,
             "channel_type": "webhook",
-            "channel_config": '{"url": "http://localhost:1880/webhook/erp/workorder"}',
+            "channel_config": _json.dumps({"url": "http://localhost:1880/webhook/erp/workorder"}),
         },
         {
             "id": uuid.UUID("60000000-0000-0000-0000-000000000003"),
@@ -243,7 +244,7 @@ async def run(session: AsyncSession) -> None:
             "event_type": "downtime_above_threshold",
             "threshold": 30.0,
             "channel_type": "email",
-            "channel_config": '{"recipients": ["supervisor@sunrise.com"]}',
+            "channel_config": _json.dumps({"recipients": ["supervisor@sunrise.com"]}),
         },
         {
             "id": uuid.UUID("60000000-0000-0000-0000-000000000004"),
@@ -251,14 +252,14 @@ async def run(session: AsyncSession) -> None:
             "event_type": "quality_below_threshold",
             "threshold": 95.0,
             "channel_type": "email",
-            "channel_config": '{"recipients": ["manager@sunrise.com"]}',
+            "channel_config": _json.dumps({"recipients": ["manager@sunrise.com"]}),
         },
     ]
     for r in alert_rules:
         await session.execute(text("""
             INSERT INTO alert_rules
                 (id, organization_id, name, event_type, threshold, channel_type, channel_config, enabled)
-            VALUES (:id, :org, :name, :event_type, :threshold, :channel_type, :channel_config::jsonb, TRUE)
+            VALUES (:id, :org, :name, :event_type, :threshold, :channel_type, cast(:channel_config as jsonb), TRUE)
             ON CONFLICT (id) DO NOTHING
         """), {"id": str(r["id"]), "org": str(ORG_ID), "name": r["name"],
                "event_type": r["event_type"], "threshold": r["threshold"],
