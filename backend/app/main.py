@@ -47,8 +47,8 @@ app = FastAPI(
 settings = get_settings()
 
 _cors_origins: list[str] = (
-    settings.cors_origins
-    if settings.cors_origins
+    settings.cors_origins_list
+    if settings.cors_origins_list
     else (["http://localhost:3000"] if settings.environment == "development" else [])
 )
 
