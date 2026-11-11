@@ -199,7 +199,7 @@ async def run(session: AsyncSession) -> None:
         await session.execute(text("""
             INSERT INTO machine_state_periods
                 (id, organization_id, machine_id, state, started_at, ended_at, source)
-            VALUES (:id, :org, :machine, :state, :started, NULL, 'simulator')
+            VALUES (:id, :org, :machine, :state, :started, NULL, 'telemetry')
             ON CONFLICT DO NOTHING
         """), {
             "id": str(uuid.uuid4()), "org": str(ORG_ID), "machine": str(machine_id),
