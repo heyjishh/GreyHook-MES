@@ -3,10 +3,9 @@ import json
 import uuid
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import AsyncSessionLocal
 from app.core.exceptions import NotFoundError, UnauthorizedError
@@ -17,56 +16,72 @@ from app.models.telemetry import MachineStatePeriod
 
 router = APIRouter()
 
+_HEARTBEAT_INTERVAL = 30
+_POLL_INTERVAL = 5
+
 
 async def _machine_status_stream(factory_id: uuid.UUID, organization_id: uuid.UUID):
-    while True:
-        try:
-            async with AsyncSessionLocal() as db:
-                lines_result = await db.execute(
-                    select(ProductionLine.id).where(
-                        ProductionLine.factory_id == factory_id,
-                        ProductionLine.organization_id == organization_id,
-                    )
-                )
-                line_ids = [row[0] for row in lines_result.all()]
+    queue: asyncio.Queue[str] = asyncio.Queue()
 
-                if line_ids:
-                    machines_result = await db.execute(
-                        select(Machine).where(
-                            Machine.line_id.in_(line_ids),
-                            Machine.organization_id == organization_id,
-                            Machine.is_active == True,
+    async def _poller():
+        while True:
+            try:
+                async with AsyncSessionLocal() as db:
+                    lines_result = await db.execute(
+                        select(ProductionLine.id).where(
+                            ProductionLine.factory_id == factory_id,
+                            ProductionLine.organization_id == organization_id,
                         )
                     )
-                    machines = machines_result.scalars().all()
+                    line_ids = [row[0] for row in lines_result.all()]
 
-                    for machine in machines:
-                        state_result = await db.execute(
-                            select(MachineStatePeriod)
-                            .where(
-                                MachineStatePeriod.machine_id == machine.id,
-                                MachineStatePeriod.organization_id == organization_id,
-                                MachineStatePeriod.ended_at == None,
+                    if line_ids:
+                        machines_result = await db.execute(
+                            select(Machine).where(
+                                Machine.line_id.in_(line_ids),
+                                Machine.organization_id == organization_id,
+                                Machine.is_active == True,
                             )
-                            .order_by(MachineStatePeriod.started_at.desc())
-                            .limit(1)
                         )
-                        period = state_result.scalar_one_or_none()
+                        machines = machines_result.scalars().all()
 
-                        event_data = {
-                            "machine_id": str(machine.id),
-                            "state": period.state if period else "offline",
-                            "timestamp": datetime.now(UTC).isoformat(),
-                            "factory_id": str(factory_id),
-                        }
-                        yield f"data: {json.dumps(event_data)}\n\n"
+                        for machine in machines:
+                            state_result = await db.execute(
+                                select(MachineStatePeriod)
+                                .where(
+                                    MachineStatePeriod.machine_id == machine.id,
+                                    MachineStatePeriod.organization_id == organization_id,
+                                    MachineStatePeriod.ended_at == None,
+                                )
+                                .order_by(MachineStatePeriod.started_at.desc())
+                                .limit(1)
+                            )
+                            period = state_result.scalar_one_or_none()
+                            event_data = {
+                                "machine_id": str(machine.id),
+                                "state": period.state if period else "offline",
+                                "timestamp": datetime.now(UTC).isoformat(),
+                                "factory_id": str(factory_id),
+                            }
+                            await queue.put(f"data: {json.dumps(event_data)}\n\n")
+            except Exception:
+                pass
+            await asyncio.sleep(_POLL_INTERVAL)
 
-        except Exception:
-            yield ": keepalive\n\n"
+    async def _heartbeat():
+        while True:
+            await asyncio.sleep(_HEARTBEAT_INTERVAL)
+            await queue.put(": ping\n\n")
 
-        await asyncio.sleep(5)
-
-        yield ": keepalive\n\n"
+    poller_task = asyncio.create_task(_poller())
+    heartbeat_task = asyncio.create_task(_heartbeat())
+    try:
+        while True:
+            frame = await queue.get()
+            yield frame
+    finally:
+        poller_task.cancel()
+        heartbeat_task.cancel()
 
 
 @router.get("/machines/{factory_id}/status")

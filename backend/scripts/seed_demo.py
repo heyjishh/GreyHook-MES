@@ -1,6 +1,7 @@
 """Seed the database with Sunrise Auto Parts demo data."""
 import asyncio
 import os
+import random
 import sys
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -44,9 +45,8 @@ ADMIN_ID = uuid.UUID("50000000-0000-0000-0000-000000000001")
 
 
 def _hash_password(password: str) -> str:
-    from passlib.context import CryptContext
-    ctx = CryptContext(schemes=["argon2"], deprecated="auto")
-    return ctx.hash(password)
+    from argon2 import PasswordHasher
+    return PasswordHasher().hash(password)
 
 
 async def run(session: AsyncSession) -> None:
@@ -126,7 +126,6 @@ async def run(session: AsyncSession) -> None:
         for i in range(8):
             period_start = now - timedelta(hours=8 - i)
             period_end = period_start + timedelta(hours=1)
-            import random
             random.seed(hash(str(machine_id)) + i)
             avail = round(random.uniform(0.70, 0.95), 4)
             perf = round(random.uniform(0.75, 0.95), 4)
@@ -182,9 +181,41 @@ async def run(session: AsyncSession) -> None:
             "started": started, "ended": ended, "dur": dur,
         })
 
+    extra_users = [
+        {"id": uuid.UUID("50000000-0000-0000-0000-000000000002"), "email": "supervisor@sunrise.com", "name": "Ravi Singh",   "role": "supervisor"},
+        {"id": uuid.UUID("50000000-0000-0000-0000-000000000003"), "email": "operator@sunrise.com",   "name": "Meena Patel", "role": "operator"},
+        {"id": uuid.UUID("50000000-0000-0000-0000-000000000004"), "email": "manager@sunrise.com",    "name": "Deepak Kumar","role": "manager"},
+    ]
+    for u in extra_users:
+        await session.execute(text("""
+            INSERT INTO users (id, organization_id, email, name, hashed_password, role, is_active)
+            VALUES (:id, :org, :email, :name, :pw, :role, TRUE)
+            ON CONFLICT (id) DO NOTHING
+        """), {"id": str(u["id"]), "org": str(ORG_ID), "email": u["email"],
+               "name": u["name"], "pw": hashed_pw, "role": u["role"]})
+
+    machine_states = ["running", "running", "fault", "idle"]
+    for idx, machine_id in enumerate(MACHINE_IDS):
+        await session.execute(text("""
+            INSERT INTO machine_state_periods
+                (id, organization_id, machine_id, state, started_at, ended_at, source)
+            VALUES (:id, :org, :machine, :state, :started, NULL, 'simulator')
+            ON CONFLICT DO NOTHING
+        """), {
+            "id": str(uuid.uuid4()), "org": str(ORG_ID), "machine": str(machine_id),
+            "state": machine_states[idx],
+            "started": now - timedelta(minutes=random.randint(5, 60)),
+        })
+
     await session.commit()
-    print("Seed complete.")
-    print("Login: admin@sunrise.com / demo1234")
+    print("✓ Seed complete.")
+    print()
+    print("Demo credentials (password: demo1234 for all):")
+    print("  admin@sunrise.com      — admin")
+    print("  supervisor@sunrise.com — supervisor")
+    print("  manager@sunrise.com    — manager")
+    print("  operator@sunrise.com   — operator")
+    print()
     print(f"Factory ID: {FACTORY_ID}")
     print(f"Line ID:    {LINE_ID}")
 
