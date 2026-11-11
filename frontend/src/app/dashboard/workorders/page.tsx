@@ -4,8 +4,11 @@ import { useState } from "react";
 import ReactECharts from "echarts-for-react";
 import {
   ClipboardList, Plus, Play, Pause, CheckCircle2,
-  AlertCircle, Clock, Package, ChevronRight, Filter,
+  AlertCircle, Clock, Package, ChevronRight, RefreshCw,
 } from "lucide-react";
+import { useProductionOrders } from "@/hooks/api";
+import { productionApi } from "@/lib/api";
+import type { ProductionOrderSchema, ProductionOrderStatus } from "@/types/api";
 
 const T = {
   brand:     "#F05230",
@@ -28,116 +31,61 @@ const T = {
   grid:      "#F0ECE8",
 };
 
-type OrderStatus = "running" | "scheduled" | "on_hold" | "completed" | "overdue";
+type DisplayStatus = "running" | "scheduled" | "on_hold" | "completed" | "overdue" | "paused" | "cancelled";
 
-interface WorkOrder {
-  id: string;
-  orderNo: string;
-  product: string;
-  partCode: string;
-  machine: string;
-  machineId: string;
-  priority: "critical" | "high" | "normal";
-  status: OrderStatus;
-  planned: number;
-  actual: number;
-  rejected: number;
-  startTime: string;
-  endTime: string;
-  elapsedPct: number;
-  cycle: string;
-}
-
-const ORDERS: WorkOrder[] = [
-  {
-    id:"WO-2024-091", orderNo:"WO-2024-091", product:"Engine Mount Bracket — Type V2",
-    partCode:"AP-EMB-V2-LH", machine:"AP-ENGINE-MOUNT-V2", machineId:"M-01",
-    priority:"critical", status:"running",
-    planned:500, actual:312, rejected:8, startTime:"16:00", endTime:"00:00",
-    elapsedPct:0.72, cycle:"45s",
-  },
-  {
-    id:"WO-2024-092", orderNo:"WO-2024-092", product:"Chassis Frame Weldment",
-    partCode:"AP-CFW-003-RH", machine:"AP-FRAME-WELD-01", machineId:"M-02",
-    priority:"high", status:"running",
-    planned:200, actual:72, rejected:6, startTime:"17:00", endTime:"01:00",
-    elapsedPct:0.44, cycle:"2m10s",
-  },
-  {
-    id:"WO-2024-093", orderNo:"WO-2024-093", product:"Stamped Body Panel — Rear Quarter",
-    partCode:"AP-BP-RQ-004", machine:"AP-PRESS-FORM-03", machineId:"M-03",
-    priority:"normal", status:"on_hold",
-    planned:800, actual:31, rejected:3, startTime:"18:00", endTime:"04:00",
-    elapsedPct:0.12, cycle:"28s",
-  },
-  {
-    id:"WO-2024-094", orderNo:"WO-2024-094", product:"Final Assembly — Suspension Kit",
-    partCode:"AP-SK-FRT-A", machine:"AP-ASSEM-LINE-A", machineId:"M-04",
-    priority:"high", status:"running",
-    planned:100, actual:68, rejected:1, startTime:"16:00", endTime:"21:00",
-    elapsedPct:0.80, cycle:"4m30s",
-  },
-  {
-    id:"WO-2024-089", orderNo:"WO-2024-089", product:"Engine Mount Bracket — Type V1",
-    partCode:"AP-EMB-V1-LH", machine:"AP-ENGINE-MOUNT-V2", machineId:"M-01",
-    priority:"normal", status:"completed",
-    planned:400, actual:400, rejected:4, startTime:"08:00", endTime:"16:00",
-    elapsedPct:1.0, cycle:"45s",
-  },
-  {
-    id:"WO-2024-095", orderNo:"WO-2024-095", product:"Gear Housing — Type 7",
-    partCode:"AP-GH-T7-003", machine:"AP-PRESS-FORM-03", machineId:"M-03",
-    priority:"high", status:"scheduled",
-    planned:600, actual:0, rejected:0, startTime:"04:00", endTime:"12:00",
-    elapsedPct:0, cycle:"28s",
-  },
-  {
-    id:"WO-2024-090", orderNo:"WO-2024-090", product:"Chassis Frame Weldment — Batch B",
-    partCode:"AP-CFW-003-LH", machine:"AP-FRAME-WELD-01", machineId:"M-02",
-    priority:"high", status:"overdue",
-    planned:150, actual:88, rejected:12, startTime:"12:00", endTime:"16:00",
-    elapsedPct:1.0, cycle:"2m10s",
-  },
-];
-
-const STATUS_CFG: Record<OrderStatus, { label: string; color: string; bg: string; icon: React.ComponentType<{ size?: number; style?: React.CSSProperties }> }> = {
+const STATUS_CFG: Record<string, { label: string; color: string; bg: string; icon: React.ComponentType<{ size?: number; style?: React.CSSProperties }> }> = {
   running:   { label:"Running",   color: T.success, bg: T.successDim, icon: Play },
   scheduled: { label:"Scheduled", color: T.neutral, bg: T.neutralDim, icon: Clock },
   on_hold:   { label:"On Hold",   color: T.warning, bg: T.warningDim, icon: Pause },
+  paused:    { label:"On Hold",   color: T.warning, bg: T.warningDim, icon: Pause },
   completed: { label:"Done",      color: T.muted,   bg: T.bgMuted,    icon: CheckCircle2 },
+  cancelled: { label:"Cancelled", color: T.muted,   bg: T.bgMuted,    icon: CheckCircle2 },
   overdue:   { label:"Overdue",   color: T.danger,  bg: T.dangerDim,  icon: AlertCircle },
 };
 
-const PRIORITY_COLOR: Record<string, string> = {
-  critical: T.danger,
-  high:     T.brand,
-  normal:   T.neutral,
-};
+function computeElapsedPct(order: ProductionOrderSchema): number {
+  if (!order.actual_start) return 0;
+  const start = new Date(order.actual_start).getTime();
+  const end   = new Date(order.planned_end).getTime();
+  const now   = Date.now();
+  if (end <= start) return 0;
+  return Math.min((now - start) / (end - start), 1);
+}
 
-function ganttOption(orders: WorkOrder[]) {
-  const machines = ["M-01","M-02","M-03","M-04"];
-  const colorMap: Record<OrderStatus, string> = {
+function formatTime(iso: string): string {
+  try {
+    return new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false });
+  } catch { return "—"; }
+}
+
+function ganttOption(orders: ProductionOrderSchema[]) {
+  const statusColors: Record<string, string> = {
     running:   T.brand + "CC",
     scheduled: T.neutral + "88",
+    paused:    T.warning + "AA",
     on_hold:   T.warning + "AA",
     completed: T.success + "66",
+    cancelled: T.muted + "55",
     overdue:   T.danger + "AA",
   };
 
-  const toMin = (t: string) => {
-    const [h, m] = t.split(":").map(Number);
+  const toMin = (iso: string) => {
+    const d = new Date(iso);
+    const h = d.getHours();
+    const m = d.getMinutes();
     return ((h < 8 ? h + 24 : h) - 8) * 60 + m;
   };
 
-  const data = orders.flatMap((o) => {
-    const mi = machines.indexOf(o.machineId);
-    if (mi < 0) return [];
-    const start = toMin(o.startTime);
-    const end   = toMin(o.endTime);
-    return [{
-      value: [mi, start, end, o.orderNo, o.status, o.product],
-      itemStyle: { color: colorMap[o.status], borderRadius: 4 },
-    }];
+  const lineIds = Array.from(new Set(orders.map((o) => o.line_id)));
+
+  const data = orders.map((o) => {
+    const li = lineIds.indexOf(o.line_id);
+    const start = toMin(o.planned_start);
+    const end   = toMin(o.planned_end);
+    return {
+      value: [li, start, end, o.order_number, o.status, o.product_code],
+      itemStyle: { color: statusColors[o.status] ?? T.muted + "88", borderRadius: 4 },
+    };
   });
 
   return {
@@ -155,7 +103,8 @@ function ganttOption(orders: WorkOrder[]) {
       axisLine: { lineStyle: { color: T.border } }, axisTick: { show: false },
     },
     yAxis: {
-      type: "category", data: machines,
+      type: "category",
+      data: lineIds.map((_, i) => `Line ${i + 1}`),
       axisLabel: { fontSize: 11, color: T.text, fontFamily: "IBM Plex Mono", fontWeight: 700 },
       axisLine: { show: false }, axisTick: { show: false },
     },
@@ -190,43 +139,53 @@ function ganttOption(orders: WorkOrder[]) {
 }
 
 export default function WorkOrdersPage() {
-  const [statusFilter, setStatusFilter] = useState<"all" | OrderStatus>("all");
-  const [expanded, setExpanded] = useState<string | null>(null);
+  const { data: apiOrders = [], isLoading, refetch } = useProductionOrders();
+  const [localOrders, setLocalOrders] = useState<ProductionOrderSchema[] | null>(null);
+  const [statusFilter, setStatusFilter] = useState<"all" | ProductionOrderStatus>("all");
+  const [expanded, setExpanded]  = useState<string | null>(null);
+  const [updating, setUpdating]  = useState<string | null>(null);
+
+  const orders = localOrders ?? apiOrders;
+
+  const handleStatusUpdate = async (orderId: string, newStatus: string) => {
+    setUpdating(orderId);
+    try {
+      const updated = await productionApi.updateOrderStatus(orderId, newStatus);
+      setLocalOrders((prev) => (prev ?? orders).map((o) => o.id === orderId ? updated : o));
+    } catch {}
+    setUpdating(null);
+  };
 
   const visible = statusFilter === "all"
-    ? ORDERS
-    : ORDERS.filter((o) => o.status === statusFilter);
+    ? orders
+    : orders.filter((o) => o.status === statusFilter);
 
-  const running   = ORDERS.filter((o) => o.status === "running").length;
-  const scheduled = ORDERS.filter((o) => o.status === "scheduled").length;
-  const overdue   = ORDERS.filter((o) => o.status === "overdue").length;
-  const totalGood = ORDERS.reduce((s, o) => s + (o.actual - o.rejected), 0);
+  const running   = orders.filter((o) => o.status === "running").length;
+  const scheduled = orders.filter((o) => o.status === "scheduled").length;
+  const totalGood = orders.reduce((s, o) => s + (o.actual_qty - o.rejected_qty), 0);
 
   return (
     <div className="max-w-[1280px] mx-auto space-y-5">
-
-      {/* Header */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-lg font-semibold text-text-primary">Work Orders</h1>
           <p className="font-mono text-xs text-text-tertiary mt-0.5">Production queue · machine assignment · progress tracking</p>
         </div>
         <div className="flex items-center gap-2">
-          <button className="inline-flex items-center gap-1.5 font-mono text-xs text-text-secondary border border-border rounded-lg px-3 py-2 hover:bg-bg-subtle transition-colors">
-            <Filter size={12} /> Filter
-          </button>
-          <button className="inline-flex items-center gap-1.5 font-mono text-xs font-bold rounded-lg px-3 py-2" style={{ background: T.brand, color: "#fff" }}>
-            <Plus size={12} /> New Order
+          <button
+            onClick={() => { setLocalOrders(null); refetch(); }}
+            className="inline-flex items-center gap-1.5 font-mono text-xs text-text-secondary border border-border rounded-lg px-3 py-2 hover:bg-bg-subtle transition-colors"
+          >
+            <RefreshCw size={12} className={isLoading ? "animate-spin" : ""} /> Refresh
           </button>
         </div>
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
           { label:"Running",    value: running.toString(),           color: T.success, bg: T.successDim, icon: Play },
           { label:"Scheduled",  value: scheduled.toString(),         color: T.neutral, bg: T.neutralDim, icon: Clock },
-          { label:"Overdue",    value: overdue.toString(),           color: T.danger,  bg: T.dangerDim,  icon: AlertCircle },
+          { label:"Orders",     value: orders.length.toString(),     color: T.brand,   bg: T.brandDim,   icon: ClipboardList },
           { label:"Good Parts", value: totalGood.toLocaleString(),   color: T.brand,   bg: T.brandDim,   icon: Package },
         ].map(({ label, value, color, bg, icon: Icon }) => (
           <div key={label} className="bg-white rounded-xl p-4 shadow-card">
@@ -241,31 +200,31 @@ export default function WorkOrdersPage() {
         ))}
       </div>
 
-      {/* Gantt */}
-      <div className="bg-white rounded-xl p-5 shadow-card">
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="text-sm font-semibold text-text-primary">Machine Schedule — Gantt</h2>
-          <div className="flex items-center gap-4">
-            {(["running","scheduled","on_hold","completed","overdue"] as OrderStatus[]).map((s) => {
-              const cfg = STATUS_CFG[s];
-              return (
-                <div key={s} className="flex items-center gap-1.5">
-                  <div className="w-2.5 h-2.5 rounded" style={{ background: cfg.color + "AA" }} />
-                  <span className="font-mono text-2xs text-text-disabled">{cfg.label}</span>
-                </div>
-              );
-            })}
+      {orders.length > 0 && (
+        <div className="bg-white rounded-xl p-5 shadow-card">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-sm font-semibold text-text-primary">Machine Schedule — Gantt</h2>
+            <div className="flex items-center gap-4">
+              {(["running","scheduled","on_hold","completed"] as const).map((s) => {
+                const cfg = STATUS_CFG[s];
+                return (
+                  <div key={s} className="flex items-center gap-1.5">
+                    <div className="w-2.5 h-2.5 rounded" style={{ background: cfg.color + "AA" }} />
+                    <span className="font-mono text-2xs text-text-disabled">{cfg.label}</span>
+                  </div>
+                );
+              })}
+            </div>
           </div>
+          <ReactECharts option={ganttOption(orders)} style={{ height: 160 }} opts={{ renderer: "svg" }} />
         </div>
-        <ReactECharts option={ganttOption(ORDERS)} style={{ height: 200 }} opts={{ renderer: "svg" }} />
-      </div>
+      )}
 
-      {/* Filter tabs */}
       <div className="flex items-center gap-1 bg-bg-subtle border border-border rounded-lg p-0.5 w-fit">
-        {(["all","running","scheduled","on_hold","overdue","completed"] as const).map((f) => (
+        {(["all","running","scheduled","paused","completed","cancelled"] as const).map((f) => (
           <button
             key={f}
-            onClick={() => setStatusFilter(f as typeof statusFilter)}
+            onClick={() => setStatusFilter(f === "all" ? "all" : f as ProductionOrderStatus)}
             className="font-mono text-xs px-3 py-1.5 rounded-md capitalize transition-all"
             style={statusFilter === f ? { background: T.brand, color: "#fff", fontWeight: 700 } : { color: T.muted }}
           >
@@ -274,141 +233,141 @@ export default function WorkOrdersPage() {
         ))}
       </div>
 
-      {/* Order list */}
-      <div className="space-y-2 pb-8">
-        {visible.map((order) => {
-          const st = STATUS_CFG[order.status];
-          const StIcon = st.icon;
-          const pct = order.planned > 0 ? order.actual / order.planned : 0;
-          const fpy = order.actual > 0 ? ((order.actual - order.rejected) / order.actual) * 100 : null;
-          const isOpen = expanded === order.id;
+      {isLoading ? (
+        <div className="text-center font-mono text-xs text-text-disabled py-10">Loading work orders…</div>
+      ) : visible.length === 0 ? (
+        <div className="text-center font-mono text-xs text-text-disabled py-10">No work orders found</div>
+      ) : (
+        <div className="space-y-2 pb-8">
+          {visible.map((order) => {
+            const st = STATUS_CFG[order.status] ?? STATUS_CFG.scheduled;
+            const StIcon = st.icon;
+            const pct = order.planned_qty > 0 ? order.actual_qty / order.planned_qty : 0;
+            const fpy = order.actual_qty > 0 ? ((order.actual_qty - order.rejected_qty) / order.actual_qty) * 100 : null;
+            const isOpen = expanded === order.id;
+            const elapsedPct = computeElapsedPct(order);
+            const isUpdating = updating === order.id;
 
-          return (
-            <div key={order.id} className="bg-white rounded-xl shadow-card overflow-hidden">
-              {/* Row */}
-              <div
-                className="flex items-center gap-4 px-5 py-4 cursor-pointer hover:bg-bg-subtle transition-colors"
-                onClick={() => setExpanded(isOpen ? null : order.id)}
-              >
-                <div className="w-1 self-stretch rounded-full" style={{ background: PRIORITY_COLOR[order.priority] }} />
+            return (
+              <div key={order.id} className="bg-white rounded-xl shadow-card overflow-hidden">
+                <div
+                  className="flex items-center gap-4 px-5 py-4 cursor-pointer hover:bg-bg-subtle transition-colors"
+                  onClick={() => setExpanded(isOpen ? null : order.id)}
+                >
+                  <div className="w-1 self-stretch rounded-full" style={{ background: T.brand }} />
 
-                <div className="min-w-0 flex-1 grid grid-cols-[1fr_6rem_8rem_8rem_6rem_2rem] items-center gap-4">
-
-                  {/* Order info */}
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-mono text-xs font-bold text-text-primary">{order.orderNo}</span>
-                      <span
-                        className="inline-flex items-center gap-1 font-mono text-2xs font-semibold rounded-full px-2 py-0.5"
-                        style={{ background: st.bg, color: st.color }}
-                      >
-                        <StIcon size={9} />
-                        {st.label}
-                      </span>
-                      <span
-                        className="font-mono text-2xs rounded px-1.5 py-0.5"
-                        style={{ background: PRIORITY_COLOR[order.priority] + "15", color: PRIORITY_COLOR[order.priority] }}
-                      >
-                        {order.priority}
-                      </span>
-                    </div>
-                    <p className="font-sans text-xs text-text-secondary truncate mt-0.5">{order.product}</p>
-                    <p className="font-mono text-2xs text-text-disabled">{order.partCode} · {order.machine}</p>
-                  </div>
-
-                  {/* Cycle */}
-                  <div>
-                    <p className="font-mono text-xs text-text-secondary tabular-nums">{order.cycle}</p>
-                    <p className="font-mono text-2xs text-text-disabled">cycle time</p>
-                  </div>
-
-                  {/* Progress */}
-                  <div>
-                    <div className="flex items-baseline gap-1">
-                      <span className="font-mono text-sm font-black tabular-nums" style={{ color: T.brand }}>{order.actual}</span>
-                      <span className="font-mono text-2xs text-text-disabled">/ {order.planned}</span>
-                    </div>
-                    <div className="w-full h-1.5 rounded-full bg-bg-muted mt-1 overflow-hidden">
-                      <div
-                        className="h-full rounded-full"
-                        style={{
-                          width: `${Math.min(pct * 100, 100)}%`,
-                          background: order.status === "overdue" ? T.danger : T.brand,
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  {/* FPY */}
-                  <div>
-                    <p className="font-mono text-xs font-bold tabular-nums" style={{ color: fpy !== null && fpy >= 97 ? T.success : T.warning }}>
-                      {fpy !== null ? `${fpy.toFixed(1)}%` : "—"}
-                    </p>
-                    <p className="font-mono text-2xs text-text-disabled">{order.rejected} rejected</p>
-                  </div>
-
-                  {/* Time */}
-                  <div>
-                    <p className="font-mono text-xs text-text-secondary tabular-nums">{order.startTime} → {order.endTime}</p>
-                    <p className="font-mono text-2xs text-text-disabled">{Math.round(order.elapsedPct * 100)}% elapsed</p>
-                  </div>
-
-                  {/* Expand */}
-                  <ChevronRight
-                    size={14}
-                    className="text-text-disabled transition-transform"
-                    style={{ transform: isOpen ? "rotate(90deg)" : "none" }}
-                  />
-                </div>
-              </div>
-
-              {/* Expanded detail */}
-              {isOpen && (
-                <div className="border-t border-border px-5 py-4 bg-bg-subtle">
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                    {[
-                      { label: "Good Parts",   value: (order.actual - order.rejected).toLocaleString(), color: T.success },
-                      { label: "Rejected",     value: order.rejected.toString(),                        color: T.danger },
-                      { label: "Remaining",    value: Math.max(order.planned - order.actual, 0).toLocaleString(), color: T.neutral },
-                      { label: "FPY",          value: fpy !== null ? `${fpy.toFixed(2)}%` : "—",      color: fpy !== null && fpy >= 97 ? T.success : T.warning },
-                    ].map(({ label, value, color }) => (
-                      <div key={label}>
-                        <p className="font-mono text-2xs text-text-disabled uppercase tracking-widest mb-1">{label}</p>
-                        <p className="font-mono text-xl font-black tabular-nums" style={{ color }}>{value}</p>
+                  <div className="min-w-0 flex-1 grid grid-cols-[1fr_8rem_8rem_6rem_2rem] items-center gap-4">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-mono text-xs font-bold text-text-primary">{order.order_number}</span>
+                        <span
+                          className="inline-flex items-center gap-1 font-mono text-2xs font-semibold rounded-full px-2 py-0.5"
+                          style={{ background: st.bg, color: st.color }}
+                        >
+                          <StIcon size={9} />
+                          {st.label}
+                        </span>
                       </div>
-                    ))}
-                  </div>
-                  <div className="flex items-center gap-2 mt-4">
-                    {order.status === "running" && (
-                      <>
-                        <button className="font-mono text-xs px-3 py-1.5 rounded-lg border border-border text-text-secondary hover:bg-bg-muted transition-colors inline-flex items-center gap-1.5">
-                          <Pause size={11} /> Hold Order
-                        </button>
-                        <button className="font-mono text-xs px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5" style={{ background: T.success, color:"#fff" }}>
-                          <CheckCircle2 size={11} /> Complete
-                        </button>
-                      </>
-                    )}
-                    {order.status === "on_hold" && (
-                      <button className="font-mono text-xs px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5" style={{ background: T.brand, color:"#fff" }}>
-                        <Play size={11} /> Resume
-                      </button>
-                    )}
-                    {order.status === "scheduled" && (
-                      <button className="font-mono text-xs px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5" style={{ background: T.brand, color:"#fff" }}>
-                        <Play size={11} /> Start Now
-                      </button>
-                    )}
-                    <button className="font-mono text-xs px-3 py-1.5 rounded-lg border border-border text-text-secondary hover:bg-bg-muted transition-colors">
-                      View Details
-                    </button>
+                      <p className="font-mono text-xs text-text-disabled mt-0.5">{order.product_code}</p>
+                    </div>
+
+                    <div>
+                      <div className="flex items-baseline gap-1">
+                        <span className="font-mono text-sm font-black tabular-nums" style={{ color: T.brand }}>{order.actual_qty}</span>
+                        <span className="font-mono text-2xs text-text-disabled">/ {order.planned_qty}</span>
+                      </div>
+                      <div className="w-full h-1.5 rounded-full bg-bg-muted mt-1 overflow-hidden">
+                        <div
+                          className="h-full rounded-full"
+                          style={{ width: `${Math.min(pct * 100, 100)}%`, background: T.brand }}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <p className="font-mono text-xs font-bold tabular-nums" style={{ color: fpy !== null && fpy >= 97 ? T.success : T.warning }}>
+                        {fpy !== null ? `${fpy.toFixed(1)}%` : "—"}
+                      </p>
+                      <p className="font-mono text-2xs text-text-disabled">{order.rejected_qty} rejected</p>
+                    </div>
+
+                    <div>
+                      <p className="font-mono text-xs text-text-secondary tabular-nums">{formatTime(order.planned_start)} → {formatTime(order.planned_end)}</p>
+                      <p className="font-mono text-2xs text-text-disabled">{Math.round(elapsedPct * 100)}% elapsed</p>
+                    </div>
+
+                    <ChevronRight
+                      size={14}
+                      className="text-text-disabled transition-transform"
+                      style={{ transform: isOpen ? "rotate(90deg)" : "none" }}
+                    />
                   </div>
                 </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+
+                {isOpen && (
+                  <div className="border-t border-border px-5 py-4 bg-bg-subtle">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-4">
+                      {[
+                        { label: "Good Parts",   value: (order.actual_qty - order.rejected_qty).toLocaleString(), color: T.success },
+                        { label: "Rejected",     value: order.rejected_qty.toString(),                             color: T.danger },
+                        { label: "Remaining",    value: Math.max(order.planned_qty - order.actual_qty, 0).toLocaleString(), color: T.neutral },
+                        { label: "FPY",          value: fpy !== null ? `${fpy.toFixed(2)}%` : "—",                color: fpy !== null && fpy >= 97 ? T.success : T.warning },
+                      ].map(({ label, value, color }) => (
+                        <div key={label}>
+                          <p className="font-mono text-2xs text-text-disabled uppercase tracking-widest mb-1">{label}</p>
+                          <p className="font-mono text-xl font-black tabular-nums" style={{ color }}>{value}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {order.status === "running" && (
+                        <>
+                          <button
+                            onClick={() => handleStatusUpdate(order.id, "paused")}
+                            disabled={isUpdating}
+                            className="font-mono text-xs px-3 py-1.5 rounded-lg border border-border text-text-secondary hover:bg-bg-muted transition-colors inline-flex items-center gap-1.5 disabled:opacity-50"
+                          >
+                            <Pause size={11} /> Hold Order
+                          </button>
+                          <button
+                            onClick={() => handleStatusUpdate(order.id, "completed")}
+                            disabled={isUpdating}
+                            className="font-mono text-xs px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5 disabled:opacity-50"
+                            style={{ background: T.success, color:"#fff" }}
+                          >
+                            <CheckCircle2 size={11} /> Complete
+                          </button>
+                        </>
+                      )}
+                      {(order.status === "paused") && (
+                        <button
+                          onClick={() => handleStatusUpdate(order.id, "running")}
+                          disabled={isUpdating}
+                          className="font-mono text-xs px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5 disabled:opacity-50"
+                          style={{ background: T.brand, color:"#fff" }}
+                        >
+                          <Play size={11} /> Resume
+                        </button>
+                      )}
+                      {order.status === "scheduled" && (
+                        <button
+                          onClick={() => handleStatusUpdate(order.id, "running")}
+                          disabled={isUpdating}
+                          className="font-mono text-xs px-3 py-1.5 rounded-lg inline-flex items-center gap-1.5 disabled:opacity-50"
+                          style={{ background: T.brand, color:"#fff" }}
+                        >
+                          <Play size={11} /> Start Now
+                        </button>
+                      )}
+                      {isUpdating && <RefreshCw size={12} className="animate-spin text-text-disabled" />}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
