@@ -2,8 +2,11 @@
 
 import { useMemo, useState } from "react";
 import ReactECharts from "echarts-for-react";
-import { useDowntimePareto, useDowntimeEvents } from "@/hooks/api";
+import { useDowntimePareto, useDowntimeEvents, useFactoryMachines } from "@/hooks/api";
 import { LoadingCard } from "@/components/ui/LoadingCard";
+import { downtimeApi } from "@/lib/api";
+
+const IS_MOCK = process.env.NEXT_PUBLIC_USE_MOCK === "true";
 
 const T = {
   brand:     "#F05230",
@@ -82,10 +85,162 @@ function mttrStatus(min: number): { label: string; color: string; bg: string } {
   return               { label: "OK",       color: T.success, bg: T.successDim };
 }
 
+const DT_CATEGORIES = ["ME", "MA", "OP", "EL", "CH"];
+
+function LogDowntimeModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+  const { data: machines } = useFactoryMachines();
+  const [machineId, setMachineId] = useState("");
+  const [category, setCategory] = useState("ME");
+  const [reason, setReason] = useState("");
+  const [startedAt, setStartedAt] = useState(() => new Date().toISOString().slice(0, 16));
+  const [endedAt, setEndedAt] = useState("");
+  const [isPlanned, setIsPlanned] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSave() {
+    if (!machineId) { setError("Select a machine"); return; }
+    setSaving(true); setError(null);
+    try {
+      if (!IS_MOCK) {
+        await downtimeApi.create(machineId, {
+          category,
+          reason: reason || null,
+          started_at: new Date(startedAt).toISOString(),
+          ended_at: endedAt ? new Date(endedAt).toISOString() : undefined,
+          is_planned: isPlanned,
+        });
+      }
+      onSaved();
+      onClose();
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Failed to save");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+      <div
+        className="rounded-2xl border w-full max-w-lg mx-4 p-6 space-y-4"
+        style={{ background: T.bg, borderColor: T.border }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between">
+          <h2 className="font-mono text-sm font-bold" style={{ color: T.text }}>Log Downtime Event</h2>
+          <button onClick={onClose} className="font-mono text-xs" style={{ color: T.muted }}>✕</button>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="col-span-2">
+            <label className="font-mono text-xs uppercase tracking-widest block mb-1" style={{ color: T.muted }}>Machine</label>
+            <select
+              value={machineId}
+              onChange={(e) => setMachineId(e.target.value)}
+              className="w-full text-sm rounded-lg border px-3 py-2 focus:outline-none"
+              style={{ borderColor: T.border, color: T.text, background: T.bgSubtle }}
+            >
+              <option value="">Select machine…</option>
+              {(machines ?? []).map((m) => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+              {IS_MOCK && Object.entries(MACHINE_NAMES).map(([id, name]) => (
+                <option key={id} value={id}>{name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="font-mono text-xs uppercase tracking-widest block mb-1" style={{ color: T.muted }}>Category</label>
+            <select
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              className="w-full text-sm rounded-lg border px-3 py-2 focus:outline-none"
+              style={{ borderColor: T.border, color: T.text, background: T.bgSubtle }}
+            >
+              {DT_CATEGORIES.map((c) => (
+                <option key={c} value={c}>{CAT_PREFIX[c]?.label ?? c} ({c})</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="font-mono text-xs uppercase tracking-widest block mb-1" style={{ color: T.muted }}>Type</label>
+            <select
+              value={isPlanned ? "planned" : "unplanned"}
+              onChange={(e) => setIsPlanned(e.target.value === "planned")}
+              className="w-full text-sm rounded-lg border px-3 py-2 focus:outline-none"
+              style={{ borderColor: T.border, color: T.text, background: T.bgSubtle }}
+            >
+              <option value="unplanned">Unplanned</option>
+              <option value="planned">Planned</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="font-mono text-xs uppercase tracking-widest block mb-1" style={{ color: T.muted }}>Started At</label>
+            <input
+              type="datetime-local"
+              value={startedAt}
+              onChange={(e) => setStartedAt(e.target.value)}
+              className="w-full text-sm rounded-lg border px-3 py-2 focus:outline-none"
+              style={{ borderColor: T.border, color: T.text, background: T.bgSubtle }}
+            />
+          </div>
+
+          <div>
+            <label className="font-mono text-xs uppercase tracking-widest block mb-1" style={{ color: T.muted }}>Ended At (optional)</label>
+            <input
+              type="datetime-local"
+              value={endedAt}
+              onChange={(e) => setEndedAt(e.target.value)}
+              className="w-full text-sm rounded-lg border px-3 py-2 focus:outline-none"
+              style={{ borderColor: T.border, color: T.text, background: T.bgSubtle }}
+            />
+          </div>
+
+          <div className="col-span-2">
+            <label className="font-mono text-xs uppercase tracking-widest block mb-1" style={{ color: T.muted }}>Reason / Notes</label>
+            <input
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="Describe the fault or reason…"
+              className="w-full text-sm rounded-lg border px-3 py-2 focus:outline-none"
+              style={{ borderColor: T.border, color: T.text, background: T.bgSubtle }}
+            />
+          </div>
+        </div>
+
+        {error && <p className="font-mono text-xs" style={{ color: T.danger }}>{error}</p>}
+
+        <div className="flex gap-3 pt-2">
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="flex-1 py-2.5 rounded-xl font-mono text-xs font-semibold text-white transition-opacity"
+            style={{ background: T.brand, opacity: saving ? 0.6 : 1 }}
+          >
+            {saving ? "Saving…" : "Log Downtime"}
+          </button>
+          <button
+            onClick={onClose}
+            className="px-5 py-2.5 rounded-xl font-mono text-xs border transition-colors"
+            style={{ borderColor: T.border, color: T.muted }}
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function DowntimePage() {
   const { data: paretoData, isLoading: paretoLoading } = useDowntimePareto();
   const { data: events, isLoading: eventsLoading }     = useDowntimeEvents();
   const [machineFilter, setMachineFilter]              = useState<string>("");
+  const [showLogModal, setShowLogModal]                = useState(false);
 
   const totalSeconds  = paretoData?.total_duration_s ?? 0;
   const eventCount    = events?.length ?? 0;
@@ -166,9 +321,22 @@ export default function DowntimePage() {
   return (
     <div className="max-w-[1280px] mx-auto space-y-5">
 
-      <div>
-        <h1 className="text-lg font-semibold text-text-primary">Downtime Analysis</h1>
-        <p className="font-mono text-xs text-text-tertiary mt-0.5">Pareto · timeline · MTTR/MTBF · event log</p>
+      {showLogModal && (
+        <LogDowntimeModal onClose={() => setShowLogModal(false)} onSaved={() => setShowLogModal(false)} />
+      )}
+
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-lg font-semibold text-text-primary">Downtime Analysis</h1>
+          <p className="font-mono text-xs text-text-tertiary mt-0.5">Pareto · timeline · MTTR/MTBF · event log</p>
+        </div>
+        <button
+          onClick={() => setShowLogModal(true)}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl font-mono text-xs font-semibold text-white shrink-0 transition-opacity hover:opacity-90"
+          style={{ background: T.danger }}
+        >
+          + Log Downtime
+        </button>
       </div>
 
       <div className="grid grid-cols-3 gap-3">

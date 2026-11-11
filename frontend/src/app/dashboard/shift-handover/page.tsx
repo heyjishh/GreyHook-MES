@@ -1,7 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { CheckCircle2, AlertTriangle, Clock, TrendingUp, TrendingDown, FileText, Plus, ChevronDown, ChevronUp } from "lucide-react";
+import { shiftHandoverApi, type ShiftHandoverSchema } from "@/lib/api";
+
+const IS_MOCK = process.env.NEXT_PUBLIC_USE_MOCK === "true";
 
 interface ShiftLog {
   id: string;
@@ -79,12 +82,76 @@ const SHIFT_COLORS = { A: { bg: "bg-brand/10", border: "border-brand/30", text: 
 const SEV_CONFIG = { high: { color: "text-danger", bg: "bg-danger/10 border-danger/20" }, medium: { color: "text-warning", bg: "bg-warning/10 border-warning/20" }, low: { color: "text-text-secondary", bg: "bg-bg border-border" } };
 
 export default function ShiftHandoverPage() {
-  const [expanded, setExpanded] = useState<string | null>("SH-2026-11-06-B");
+  const [expanded, setExpanded] = useState<string | null>(IS_MOCK ? "SH-2026-11-06-B" : null);
   const [creating, setCreating] = useState(false);
   const [newNotes, setNewNotes] = useState("");
   const [acknowledged, setAcknowledged] = useState<Set<string>>(new Set());
+  const [logs, setLogs] = useState<ShiftHandoverSchema[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+  const [newShift, setNewShift] = useState({
+    shift_name: "C", supervisor_name: "", production_target: 500, production_actual: 0,
+    fpy_pct: 100, oee_pct: 0, downtime_minutes: 0, open_ncrs: 0,
+  });
 
-  const currentLog = MOCK_LOGS[0];
+  useEffect(() => {
+    if (!IS_MOCK) shiftHandoverApi.list().then(setLogs).catch(() => {});
+  }, []);
+
+  const displayLogs = IS_MOCK
+    ? MOCK_LOGS
+    : logs.map((r) => ({
+        id: r.id,
+        shift: r.shift_name as "A" | "B" | "C",
+        date: r.shift_date,
+        supervisor: r.supervisor_name,
+        fromTime: r.from_time,
+        toTime: r.to_time,
+        production: { target: r.production_target, actual: r.production_actual, fpy: r.fpy_pct },
+        oee: r.oee_pct,
+        downtime: r.downtime_minutes,
+        openNCRs: r.open_ncrs,
+        status: r.status as "submitted" | "acknowledged" | "pending",
+        notes: r.notes,
+        issues: r.issues as ShiftLog["issues"],
+        handoverItems: r.handover_items.map((hi) => ({ ...hi, from: (hi as Record<string, unknown>).from_name as string })) as ShiftLog["handoverItems"],
+      }));
+
+  const currentLog = displayLogs[0] ?? MOCK_LOGS[0];
+
+  async function handleSubmitHandover() {
+    setSubmitting(true);
+    try {
+      const now = new Date();
+      const dateStr = now.toISOString().slice(0, 10);
+      if (!IS_MOCK) {
+        const created = await shiftHandoverApi.create({
+          shift_name: newShift.shift_name,
+          shift_date: dateStr,
+          from_time: "22:00",
+          to_time: "06:00",
+          supervisor_name: newShift.supervisor_name || "Supervisor",
+          production_target: newShift.production_target,
+          production_actual: newShift.production_actual,
+          fpy_pct: newShift.fpy_pct,
+          oee_pct: newShift.oee_pct,
+          downtime_minutes: newShift.downtime_minutes,
+          open_ncrs: newShift.open_ncrs,
+          notes: newNotes,
+          issues: [],
+          handover_items: [],
+        });
+        setLogs((prev) => [created, ...prev]);
+      }
+      setCreating(false);
+      setNewNotes("");
+    } finally { setSubmitting(false); }
+  }
+
+  async function handleAcknowledge(id: string) {
+    if (!IS_MOCK) await shiftHandoverApi.acknowledge(id);
+    setAcknowledged((prev) => new Set([...prev, id]));
+    setLogs((prev) => prev.map((r) => r.id === id ? { ...r, status: "acknowledged" } : r));
+  }
 
   return (
     <div className="space-y-4">
@@ -155,13 +222,13 @@ export default function ShiftHandoverPage() {
             </div>
           </div>
           <div className="flex gap-2">
-            <button onClick={() => setCreating(false)}
-              className="px-5 py-2 bg-brand text-white rounded-lg font-sans text-xs font-semibold hover:bg-brand/90 transition-colors">
-              Submit & Sign
+            <button onClick={handleSubmitHandover} disabled={submitting}
+              className="px-5 py-2 bg-brand text-white rounded-lg font-sans text-xs font-semibold hover:bg-brand/90 transition-colors disabled:opacity-60">
+              {submitting ? "Submitting…" : "Submit & Sign"}
             </button>
             <button onClick={() => setCreating(false)}
               className="px-5 py-2 bg-surface border border-border text-text-primary rounded-lg font-sans text-xs hover:bg-bg transition-colors">
-              Save Draft
+              Cancel
             </button>
           </div>
         </div>
@@ -169,7 +236,7 @@ export default function ShiftHandoverPage() {
 
       {/* Handover log list */}
       <div className="space-y-3">
-        {MOCK_LOGS.map(log => {
+        {displayLogs.map(log => {
           const sc = SHIFT_COLORS[log.shift];
           const isExpanded = expanded === log.id;
           const isAcked = acknowledged.has(log.id);
@@ -267,7 +334,7 @@ export default function ShiftHandoverPage() {
                     <div className="flex items-center gap-3 bg-brand/8 border border-brand/20 rounded-lg px-3 py-2">
                       <FileText size={13} className="text-brand shrink-0" />
                       <p className="font-sans text-xs text-brand flex-1">Incoming supervisor — please review and acknowledge this handover</p>
-                      <button onClick={() => setAcknowledged(s => new Set([...s, log.id]))}
+                      <button onClick={() => handleAcknowledge(log.id)}
                         className="px-3 py-1 bg-brand text-white rounded font-sans text-xs font-semibold hover:bg-brand/90 transition-colors whitespace-nowrap">
                         Acknowledge & Sign
                       </button>

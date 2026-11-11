@@ -482,3 +482,103 @@ export const shiftsApi = {
   delete: (shiftId: string) =>
     apiFetch<{ ok: boolean }>(`/shifts/${shiftId}`, { method: "DELETE" }),
 };
+
+export interface AlertRuleSchema {
+  id: string;
+  organization_id: string;
+  name: string;
+  event_type: string;
+  threshold: number | null;
+  channel_type: string;
+  channel_config: Record<string, unknown>;
+  enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export const alertRulesApi = {
+  list: () => apiFetch<AlertRuleSchema[]>("/settings/alert-rules"),
+  create: (data: {
+    name: string;
+    event_type: string;
+    threshold?: number | null;
+    channel_type: string;
+    channel_config: Record<string, unknown>;
+    enabled?: boolean;
+  }) => apiFetch<AlertRuleSchema>("/settings/alert-rules", { method: "POST", body: data }),
+  update: (id: string, data: { name?: string; threshold?: number | null; channel_config?: Record<string, unknown>; enabled?: boolean }) =>
+    apiFetch<AlertRuleSchema>(`/settings/alert-rules/${id}`, { method: "PATCH", body: data }),
+  delete: (id: string) =>
+    apiFetch<void>(`/settings/alert-rules/${id}`, { method: "DELETE" }),
+};
+
+export interface ShiftHandoverSchema {
+  id: string;
+  organization_id: string;
+  shift_name: string;
+  shift_date: string;
+  from_time: string;
+  to_time: string;
+  supervisor_name: string;
+  production_target: number;
+  production_actual: number;
+  fpy_pct: number;
+  oee_pct: number;
+  downtime_minutes: number;
+  open_ncrs: number;
+  notes: string;
+  issues: Array<{ severity: string; description: string; action: string; resolved: boolean }>;
+  handover_items: Array<{ category: string; item: string; from_name: string; to_name?: string }>;
+  status: string;
+  submitted_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export const shiftHandoverApi = {
+  list: (params?: { limit?: number; offset?: number }) => {
+    const qs = new URLSearchParams();
+    if (params?.limit) qs.set("limit", String(params.limit));
+    if (params?.offset) qs.set("offset", String(params.offset));
+    const q = qs.toString();
+    return apiFetch<ShiftHandoverSchema[]>(`/shift-handovers${q ? `?${q}` : ""}`);
+  },
+  create: (data: {
+    shift_name: string;
+    shift_date: string;
+    from_time: string;
+    to_time: string;
+    supervisor_name: string;
+    production_target: number;
+    production_actual: number;
+    fpy_pct: number;
+    oee_pct: number;
+    downtime_minutes: number;
+    open_ncrs: number;
+    notes: string;
+    issues: Array<Record<string, unknown>>;
+    handover_items: Array<Record<string, unknown>>;
+  }) => apiFetch<ShiftHandoverSchema>("/shift-handovers", { method: "POST", body: data }),
+  acknowledge: (id: string) =>
+    apiFetch<ShiftHandoverSchema>(`/shift-handovers/${id}`, { method: "PATCH", body: { status: "acknowledged" } }),
+};
+
+export interface ConnectorSchema {
+  id: string;
+  organization_id: string;
+  factory_id: string | null;
+  name: string;
+  system_type: string;
+  base_url: string;
+  auth_type: string;
+  enabled_modules: string[];
+  sync_interval_minutes: number;
+  is_active: boolean;
+  last_sync_at: string | null;
+  created_at: string;
+}
+
+export const connectorsApi = {
+  list: () => apiFetch<ConnectorSchema[]>("/integrations"),
+  test: (id: string) => apiFetch<{ success: boolean; message: string }>(`/integrations/${id}/test`, { method: "POST", body: {} }),
+};
