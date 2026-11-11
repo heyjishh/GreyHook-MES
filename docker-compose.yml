@@ -75,6 +75,8 @@ services:
         rpk topic create mes.production.events   --brokers redpanda:9092 --partitions 2 --replicas 1 || true &&
         rpk topic create mes.downtime.events     --brokers redpanda:9092 --partitions 2 --replicas 1 || true &&
         rpk topic create mes.alerts              --brokers redpanda:9092 --partitions 1 --replicas 1 || true &&
+        rpk topic create ai.investigation.requested --brokers redpanda:9092 --partitions 2 --replicas 1 || true &&
+        rpk topic create ai.investigation.completed --brokers redpanda:9092 --partitions 2 --replicas 1 || true &&
         echo 'Topics ready.'
       "
     restart: "no"
@@ -245,6 +247,22 @@ services:
         condition: service_healthy
       temporal:
         condition: service_started
+
+  ai-service:
+    build:
+      context: ./ai-service
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      POSTGRES_DSN: postgresql://greyhook:devpassword@postgres:5432/greyhook_mes
+    env_file:
+      - .env
+    depends_on:
+      redpanda-init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
 
   frontend:
     build:

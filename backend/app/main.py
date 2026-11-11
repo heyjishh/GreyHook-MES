@@ -26,7 +26,16 @@ async def lifespan(app: FastAPI):
     except Exception as exc:
         logger.error("database_connection_failed", error=str(exc))
 
+    import asyncio
+    from app.kafka_producer import start_kafka_producer, stop_kafka_producer
+    from app.workers.ai_result_worker import run_ai_result_worker
+
+    await start_kafka_producer()
+    asyncio.create_task(run_ai_result_worker())
+
     yield
+
+    await stop_kafka_producer()
 
 
 app = FastAPI(

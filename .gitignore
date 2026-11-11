@@ -75,3 +75,13 @@ logs/
 
 # AI evaluation data with real factory data
 ai/evaluation/real_data/
+
+# Ruflo local secrets and runtime data
+.claude-flow/data/
+.claude-flow/logs/
+.claude-flow/sessions/
+
+# Codex local configuration
+.codex/
+# Claude Flow runtime data
+# Environment variables

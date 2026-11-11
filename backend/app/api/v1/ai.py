@@ -1,6 +1,5 @@
 import uuid
 from datetime import UTC, datetime, timedelta
-from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import func, select
@@ -25,25 +24,11 @@ router = APIRouter()
 RATE_LIMIT_PER_ORG_PER_HOUR = 10
 
 
-async def _get_temporal_client():
-    from temporalio.client import Client
-
-    from app.core.config import get_settings
-
-    settings = get_settings()
-    return await Client.connect(settings.temporal_host, namespace=settings.temporal_namespace)
-
-
-async def get_temporal_client():
-    return await _get_temporal_client()
-
-
 @router.post("/ai/investigations", status_code=status.HTTP_202_ACCEPTED, response_model=AIInvestigationCreateResponse)
 async def create_investigation(
     body: AIInvestigationCreateRequest,
     current_user: User = Depends(require_role(UserRole.supervisor, UserRole.manager, UserRole.admin)),
     db: AsyncSession = Depends(get_db),
-    temporal_client: Any = Depends(get_temporal_client),
 ):
     one_hour_ago = datetime.now(UTC) - timedelta(hours=1)
     count_result = await db.execute(
@@ -80,22 +65,23 @@ async def create_investigation(
     await db.commit()
     await db.refresh(investigation)
 
-    from app.workflows.ai_investigation import AIInvestigationInput, AIInvestigationWorkflow
+    from app.core.config import get_settings as _get_settings
+    from app.kafka_producer import publish
 
-    workflow_input = AIInvestigationInput(
-        investigation_id=str(investigation_id),
-        organization_id=str(current_user.organization_id),
-        question=body.question,
-        context=context_data,
+    _cfg = _get_settings()
+    await publish(
+        topic=_cfg.kafka_ai_request_topic,
+        payload={
+            "investigation_id": str(investigation_id),
+            "organization_id": str(current_user.organization_id),
+            "question": body.question,
+            "machine_id": context_data.get("machine_id"),
+            "from_time": context_data["from"],
+            "to_time": context_data["to"],
+            "model_id": "claude-sonnet-4-6",
+            "created_at": datetime.now(UTC).isoformat(),
+        },
     )
-    handle = await temporal_client.start_workflow(
-        AIInvestigationWorkflow.run,
-        workflow_input,
-        id=f"ai-investigation-{investigation_id}",
-        task_queue="greyhook-ai-investigations",
-    )
-    investigation.temporal_run_id = handle.id
-    await db.commit()
 
     return AIInvestigationCreateResponse(
         investigation_id=investigation_id,

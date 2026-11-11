@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     refresh_token_expire_days: int = 7
 
     kafka_bootstrap_servers: str = "localhost:9092"
+    kafka_ai_request_topic: str = "ai.investigation.requested"
+    kafka_ai_result_topic: str = "ai.investigation.completed"
 
     valkey_url: str = "redis://localhost:6379"
 
