@@ -1,12 +1,8 @@
 import structlog
 from haystack import Document, Pipeline
 from haystack.components.builders import ChatPromptBuilder
-from haystack.components.embedders import (
-    SentenceTransformersDocumentEmbedder,
-    SentenceTransformersTextEmbedder,
-)
 from haystack.components.generators.chat import AnthropicChatGenerator, OpenAIChatGenerator
-from haystack.components.retrievers.in_memory import InMemoryEmbeddingRetriever
+from haystack.components.retrievers.in_memory import InMemoryBM25Retriever
 from haystack.components.writers import DocumentWriter
 from haystack.dataclasses import ChatMessage
 from haystack.document_stores.in_memory import InMemoryDocumentStore
@@ -27,8 +23,6 @@ _TEMPLATE = [
         "Provide: 1) Direct answer 2) Evidence from the data 3) Root cause 4) Recommended actions."
     ),
 ]
-
-_EMBED_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
 _GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
 _XAI_BASE_URL = "https://api.x.ai/v1"
@@ -77,26 +71,19 @@ class InvestigationPipeline:
             )]
 
         doc_store = InMemoryDocumentStore()
-
-        index_pipeline = Pipeline()
-        index_pipeline.add_component("embedder", SentenceTransformersDocumentEmbedder(model=_EMBED_MODEL))
-        index_pipeline.add_component("writer", DocumentWriter(document_store=doc_store))
-        index_pipeline.connect("embedder.documents", "writer.documents")
-        index_pipeline.run({"embedder": {"documents": documents}})
+        doc_store.write_documents(documents)
 
         query_pipeline = Pipeline()
-        query_pipeline.add_component("text_embedder", SentenceTransformersTextEmbedder(model=_EMBED_MODEL))
         query_pipeline.add_component(
-            "retriever", InMemoryEmbeddingRetriever(document_store=doc_store, top_k=10)
+            "retriever", InMemoryBM25Retriever(document_store=doc_store, top_k=10)
         )
         query_pipeline.add_component("prompt_builder", ChatPromptBuilder(template=_TEMPLATE))
         query_pipeline.add_component("llm", _make_generator(api_key, model_id, model_provider))
-        query_pipeline.connect("text_embedder.embedding", "retriever.query_embedding")
         query_pipeline.connect("retriever.documents", "prompt_builder.documents")
         query_pipeline.connect("prompt_builder.prompt", "llm.messages")
 
         result = query_pipeline.run({
-            "text_embedder": {"text": question},
+            "retriever": {"query": question},
             "prompt_builder": {"question": question},
         })
 
