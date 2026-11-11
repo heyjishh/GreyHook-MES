@@ -248,6 +248,21 @@ services:
       temporal:
         condition: service_started
 
+  gemini-web2api:
+    build:
+      context: https://github.com/Sophomoresty/gemini-web2api.git
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    volumes:
+      - ./infra/gemini-web2api/config.json:/app/config.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8081/v1/models')\""]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
   ai-service:
     build:
       context: ./ai-service
@@ -256,6 +271,7 @@ services:
     environment:
       KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
       POSTGRES_DSN: postgresql://greyhook:devpassword@postgres:5432/greyhook_mes
+      GEMINI_API_BASE_URL: http://gemini-web2api:8081/v1
     env_file:
       - .env
     depends_on:

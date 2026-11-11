@@ -25,11 +25,15 @@ _TEMPLATE = [
     ),
 ]
 
-_GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
 _XAI_BASE_URL = "https://api.x.ai/v1"
 
 
-def _make_generator(api_key: str, model_id: str, model_provider: str):
+def _make_generator(
+    api_key: str,
+    model_id: str,
+    model_provider: str,
+    gemini_base_url: str = "http://gemini-web2api:8081/v1",
+):
     if model_provider == "anthropic":
         return AnthropicChatGenerator(
             api_key=Secret.from_token(api_key),
@@ -42,9 +46,9 @@ def _make_generator(api_key: str, model_id: str, model_provider: str):
         )
     elif model_provider == "gemini":
         return OpenAIChatGenerator(
-            api_key=Secret.from_token(api_key),
+            api_key=Secret.from_token(api_key or "any"),
             model=model_id,
-            api_base_url=_GEMINI_BASE_URL,
+            api_base_url=gemini_base_url,
         )
     elif model_provider == "xai":
         return OpenAIChatGenerator(
@@ -64,6 +68,7 @@ class InvestigationPipeline:
         api_key: str,
         model_id: str = "claude-sonnet-4-6",
         model_provider: str = "anthropic",
+        gemini_base_url: str = "http://gemini-web2api:8081/v1",
     ) -> dict:
         if not documents:
             documents = [Document(
@@ -79,7 +84,9 @@ class InvestigationPipeline:
             "retriever", InMemoryBM25Retriever(document_store=doc_store, top_k=10)
         )
         query_pipeline.add_component("prompt_builder", ChatPromptBuilder(template=_TEMPLATE))
-        query_pipeline.add_component("llm", _make_generator(api_key, model_id, model_provider))
+        query_pipeline.add_component(
+            "llm", _make_generator(api_key, model_id, model_provider, gemini_base_url)
+        )
         query_pipeline.connect("retriever.documents", "prompt_builder.documents")
         query_pipeline.connect("prompt_builder.prompt", "llm.messages")
 

@@ -106,6 +106,43 @@ async def create_investigation(
     )
 
 
+@router.get("/ai/investigations", response_model=list[AIInvestigationSchema])
+async def list_investigations(
+    limit: int = 20,
+    offset: int = 0,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(AIInvestigation)
+        .where(AIInvestigation.organization_id == current_user.organization_id)
+        .order_by(AIInvestigation.created_at.desc())
+        .limit(min(limit, 100))
+        .offset(offset)
+    )
+    investigations = result.scalars().all()
+
+    out = []
+    for inv in investigations:
+        parsed_result: AIResultSchema | None = None
+        if inv.result is not None:
+            try:
+                parsed_result = AIResultSchema.model_validate(inv.result)
+            except Exception:
+                parsed_result = None
+        out.append(AIInvestigationSchema(
+            id=inv.id,
+            status=inv.status,
+            question=inv.question,
+            result=parsed_result,
+            model_provider=inv.model_provider,
+            model_id=inv.model_id,
+            created_at=inv.created_at,
+            completed_at=inv.completed_at,
+        ))
+    return out
+
+
 @router.get("/ai/investigations/{investigation_id}", response_model=AIInvestigationSchema)
 async def get_investigation(
     investigation_id: uuid.UUID,

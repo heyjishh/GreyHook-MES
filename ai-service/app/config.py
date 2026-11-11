@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     kafka_result_topic: str = "ai.investigation.completed"
     postgres_dsn: str = "postgresql://greyhook:devpassword@postgres:5432/greyhook_mes"
     anthropic_api_key: str = ""
+    gemini_api_base_url: str = "http://gemini-web2api:8081/v1"
     log_level: str = "INFO"
 
     model_config = SettingsConfigDict(env_file=".env", env_prefix="", extra="ignore")

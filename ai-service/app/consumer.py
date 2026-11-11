@@ -82,6 +82,7 @@ def run_consumer(settings: Settings) -> None:
                 api_key=effective_key,
                 model_id=request.model_id,
                 model_provider=request.model_provider,
+                gemini_base_url=settings.gemini_api_base_url,
             )
             result = _build_result(
                 request=request,

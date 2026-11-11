@@ -407,6 +407,11 @@ export default function AIPage() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
+  useEffect(() => {
+    if (IS_MOCK) return;
+    aiApi.listInvestigations().then(setHistory).catch(() => {});
+  }, []);
+
   const stopPolling = useCallback(() => {
     if (pollRef.current) {
       clearInterval(pollRef.current);
