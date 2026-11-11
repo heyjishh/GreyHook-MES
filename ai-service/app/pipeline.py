@@ -1,7 +1,8 @@
 import structlog
 from haystack import Document, Pipeline
 from haystack.components.builders import ChatPromptBuilder
-from haystack.components.generators.chat import AnthropicChatGenerator, OpenAIChatGenerator
+from haystack.components.generators.chat import OpenAIChatGenerator
+from haystack_integrations.components.generators.anthropic import AnthropicChatGenerator
 from haystack.components.retrievers.in_memory import InMemoryBM25Retriever
 from haystack.components.writers import DocumentWriter
 from haystack.dataclasses import ChatMessage
