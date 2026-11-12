@@ -1,11 +1,12 @@
 from fastapi import APIRouter
 
 from app.api.v1 import (
-    ai, alert_rules, andon, auth, dispatch, downtime, energy, factories, fleet,
-    fleets_groups, forecast, gate_pass, grn, health, integrations, inventory, labor,
-    llm_configs, machines, modules, oee, payloads, places, production, proofs, quality,
-    sales_orders, scheduling, search, service_areas, shift_handover, shifts, spc, sse,
-    suppliers, traceability, tracking, users, warehouse,
+    ai, alert_rules, andon, auth, contacts, dispatch, downtime, energy, factories, fleet,
+    fleet_issues, fleets_groups, forecast, fuel_reports, gate_pass, grn, health,
+    integrations, inventory, labor, llm_configs, machines, modules, oee, payloads,
+    places, production, proofs, quality, sales_orders, scheduling, search,
+    service_areas, shift_handover, shifts, spc, sse, stock_adjustments, suppliers,
+    traceability, tracking, users, vendors, warehouse,
 )
 
 router = APIRouter()
@@ -52,3 +53,9 @@ router.include_router(suppliers.po_router, tags=["purchase-orders"])
 router.include_router(service_areas.router, tags=["service-areas"])
 router.include_router(service_areas.zones_router, tags=["service-zones"])
 router.include_router(service_areas.rates_router, tags=["service-rates"])
+router.include_router(contacts.router, tags=["contacts"])
+router.include_router(vendors.router, tags=["vendors"])
+router.include_router(vendors.device_router, tags=["vehicle-devices"])
+router.include_router(fuel_reports.router, tags=["fuel-reports"])
+router.include_router(fleet_issues.router, tags=["fleet-issues"])
+router.include_router(stock_adjustments.router, tags=["stock-adjustments"])
