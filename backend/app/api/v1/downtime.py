@@ -230,6 +230,38 @@ async def downtime_pareto(
     }
 
 
+@router.post("/downtime/{downtime_id}/ai-explain")
+async def ai_explain_downtime(
+    downtime_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services.llm_caller import ask_claude
+
+    result = await db.execute(
+        select(DowntimeEvent).where(
+            DowntimeEvent.id == downtime_id,
+            DowntimeEvent.organization_id == current_user.organization_id,
+        )
+    )
+    event = result.scalar_one_or_none()
+    if event is None:
+        raise NotFoundError(f"Downtime event {downtime_id} not found")
+
+    duration_min = round((event.duration_seconds or 0) / 60, 1)
+    prompt = (
+        f"You are a manufacturing AI assistant. Analyze this downtime event and provide root cause suggestions.\n\n"
+        f"Category: {event.category or 'unknown'}\n"
+        f"Reason logged: {event.reason or 'not specified'}\n"
+        f"Duration: {duration_min} minutes\n"
+        f"Planned: {'Yes' if event.is_planned else 'No'}\n\n"
+        f"Provide: (1) likely root causes, (2) immediate corrective action, (3) preventive recommendation. "
+        f"Be concise — 3 bullet points max. Factory floor supervisor audience."
+    )
+    commentary = await ask_claude(prompt, db, current_user.organization_id, max_tokens=300)
+    return {"downtime_id": str(downtime_id), "ai_explanation": commentary}
+
+
 @router.get("/downtime/pareto", response_model=dict)
 async def downtime_pareto_factory(
     factory_id: uuid.UUID,

@@ -1,9 +1,10 @@
 from fastapi import APIRouter
 
 from app.api.v1 import (
-    ai, alert_rules, auth, downtime, factories, health,
-    integrations, llm_configs, machines, modules, oee,
-    production, search, shift_handover, shifts, sse, users,
+    ai, alert_rules, andon, auth, downtime, energy, factories, forecast,
+    health, integrations, labor, llm_configs, machines, modules, oee,
+    production, quality, scheduling, search, shift_handover, shifts, spc,
+    sse, traceability, users,
 )
 
 router = APIRouter()
@@ -25,3 +26,11 @@ router.include_router(llm_configs.router, tags=["llm-configs"])
 router.include_router(alert_rules.router, tags=["alert-rules"])
 router.include_router(shift_handover.router, tags=["shift-handover"])
 router.include_router(search.router)
+router.include_router(spc.router, tags=["spc"])
+router.include_router(quality.router, tags=["quality"])
+router.include_router(traceability.router, tags=["traceability"])
+router.include_router(energy.router, tags=["energy"])
+router.include_router(labor.router, tags=["labor"])
+router.include_router(scheduling.router, tags=["scheduling"])
+router.include_router(andon.router, tags=["andon"])
+router.include_router(forecast.router, tags=["forecast"])

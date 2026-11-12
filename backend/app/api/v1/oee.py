@@ -288,6 +288,71 @@ async def get_oee_per_machine(
     return PerMachineOEEResponse(items=items, factory_id=factory_id)
 
 
+@router.get("/oee/ai-insight")
+async def get_oee_ai_insight(
+    factory_id: uuid.UUID,
+    hours: int = 8,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.services.llm_caller import ask_claude
+
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+    line_ids_result = await db.execute(
+        select(ProductionLine.id).where(
+            ProductionLine.factory_id == factory_id,
+            ProductionLine.organization_id == current_user.organization_id,
+        )
+    )
+    line_ids = [row[0] for row in line_ids_result.all()]
+    machine_ids: list[uuid.UUID] = []
+    if line_ids:
+        machine_ids_result = await db.execute(
+            select(Machine.id).where(
+                Machine.line_id.in_(line_ids),
+                Machine.organization_id == current_user.organization_id,
+                Machine.is_active == True,
+            )
+        )
+        machine_ids = [row[0] for row in machine_ids_result.all()]
+
+    oee_data: list[str] = []
+    if machine_ids:
+        agg_result = await db.execute(
+            select(Machine.name, func.avg(OEEAggregate.oee).label("avg_oee"),
+                   func.avg(OEEAggregate.availability).label("avail"),
+                   func.avg(OEEAggregate.performance).label("perf"),
+                   func.avg(OEEAggregate.quality).label("qual"))
+            .join(OEEAggregate, OEEAggregate.machine_id == Machine.id)
+            .where(
+                OEEAggregate.machine_id.in_(machine_ids),
+                OEEAggregate.organization_id == current_user.organization_id,
+                OEEAggregate.period_start >= cutoff,
+            )
+            .group_by(Machine.name)
+            .order_by(func.avg(OEEAggregate.oee_value).asc())
+        )
+        for row in agg_result.all():
+            rm = dict(row._mapping)
+            oee_data.append(
+                f"{rm['name']}: OEE={round(float(rm['avg_oee'] or 0)*100,1)}%, "
+                f"A={round(float(rm['avail'] or 0)*100,1)}%, "
+                f"P={round(float(rm['perf'] or 0)*100,1)}%, "
+                f"Q={round(float(rm['qual'] or 0)*100,1)}%"
+            )
+
+    data_str = "\n".join(oee_data) if oee_data else "No OEE data available for the period."
+    prompt = (
+        f"You are a manufacturing AI assistant. Analyze the OEE data below for the last {hours} hours "
+        f"and give a 3-5 sentence factory performance insight.\n\n"
+        f"Machine OEE breakdown:\n{data_str}\n\n"
+        f"Identify: (1) top performing machines, (2) problem areas, (3) one priority action. "
+        f"Be direct and practical for a plant manager."
+    )
+    insight = await ask_claude(prompt, db, current_user.organization_id, max_tokens=350)
+    return {"factory_id": str(factory_id), "hours": hours, "ai_insight": insight, "machines_analyzed": len(oee_data)}
+
+
 @router.get("/oee/machines/{machine_id}/hourly", response_model=MachineHourlyOEEResponse)
 async def get_machine_oee_hourly(
     machine_id: uuid.UUID,
