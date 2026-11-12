@@ -10,6 +10,43 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.5.0] — 2026-11-12
+
+### Added
+
+**7 backend APIs for previously mock-only frontend pages**
+
+- **SPC (Statistical Process Control)** — `GET /spc/charts?machine_id=&tag=&hours=` returns control chart data: mean, UCL (mean+3σ), LCL (mean-3σ), std dev, and a list of out-of-control points from live telemetry.
+- **Quality inspections** — `GET/POST/PATCH /quality/inspections` — inspection records with type, status, result, defect count, sample size, and inspector. Migration 0005 creates the `quality_inspections` table.
+- **Traceability** — `GET /traceability/lots` and `GET /traceability/lots/{lot_id}/genealogy` — lot tracking derived from production orders and BOM linkage (no extra table needed for MVP).
+- **Energy monitoring** — `GET /energy` — per-machine kWh consumption derived from power telemetry or state-based estimation (running=15 kWh/h, idle=3 kWh/h, fault=1 kWh/h). Returns factory total and cost estimate at ₹8/kWh.
+- **Labor tracking** — `GET /labor/operators` and `GET /labor/utilization` — operator list from users table (role=operator) with shift and order completion stats.
+- **Scheduling** — `GET /scheduling/jobs`, `GET /scheduling/gantt`, `PATCH /scheduling/jobs/{id}/priority` — production orders as job cards with priority reordering and gantt-ready time-window data.
+- **Andon board** — `GET /andon/board` aggregates active machine faults, unclassified downtime, and OEE threshold alerts into a single real-time board. `POST /andon/board/{id}/acknowledge` closes an alert with a note.
+
+**OEE Forecasting**
+
+- `GET /forecast/oee?machine_id=&horizon_hours=24` — exponential-weighted average with 24h seasonality; returns hourly predictions with 95% confidence bands (`±1.96σ`), trend direction (`improving`/`stable`/`declining`), and an **AI-generated commentary** (2–3 sentences for a supervisor, written by Claude). Method: EWA-seasonal (arXiv:2507.02890 approach).
+
+**AI improvements on existing endpoints**
+
+- `POST /downtime/{id}/ai-explain` — given a downtime event ID, fetches the event plus ±15 min surrounding telemetry and returns LLM root-cause hypothesis, confidence level, and suggested corrective actions.
+- `GET /oee/ai-insight?factory_id=&hours=8` — identifies the worst-performing machine factory-wide and returns a 1–2 sentence actionable insight from Claude.
+- Shift handover creation (`POST /shift-handover`) — AI summary is now auto-appended to the handover notes: 3 bullet points covering production highlights, open issues, and what to watch.
+
+**Infrastructure**
+
+- `backend/app/services/llm_caller.py` — shared `ask_claude(prompt, db, org_id, max_tokens)` helper used by all AI-augmented endpoints; reads `LLM_PROVIDER` and `ANTHROPIC_API_KEY` from settings; falls back to a plain-text placeholder when no key is configured.
+- Migration 0005 (`0005_quality_inspections.py`) — creates `quality_inspections` with org-scoped indexes.
+
+### Fixed
+
+- `--text-tertiary` contrast ratio raised from 3.7:1 to 8.4:1 (`#6A8A9A` → `#2E5068`), passing WCAG AA for normal text.
+- `--text-disabled` lightened to `#8AAABB` (readable but visually distinct from active text).
+- `--sidebar-fg-muted` bumped to `#9AB4D4` for legibility on the dark navy sidebar.
+
+---
+
 ## [0.4.0] — 2026-11-12
 
 ### Added
@@ -103,7 +140,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
-[Unreleased]: https://github.com/heyjishh/GreyHook-MES/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/heyjishh/GreyHook-MES/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/heyjishh/GreyHook-MES/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/heyjishh/GreyHook-MES/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/heyjishh/GreyHook-MES/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/heyjishh/GreyHook-MES/compare/v0.1.0...v0.2.0
