@@ -2,9 +2,10 @@ from fastapi import APIRouter
 
 from app.api.v1 import (
     ai, alert_rules, andon, auth, dispatch, downtime, energy, factories, fleet,
-    forecast, gate_pass, grn, health, integrations, inventory, labor, llm_configs,
-    machines, modules, oee, production, quality, sales_orders, scheduling, search,
-    shift_handover, shifts, spc, sse, traceability, users, warehouse,
+    fleets_groups, forecast, gate_pass, grn, health, integrations, inventory, labor,
+    llm_configs, machines, modules, oee, payloads, places, production, proofs, quality,
+    sales_orders, scheduling, search, service_areas, shift_handover, shifts, spc, sse,
+    suppliers, traceability, tracking, users, warehouse,
 )
 
 router = APIRouter()
@@ -41,3 +42,13 @@ router.include_router(dispatch.router, tags=["dispatch"])
 router.include_router(fleet.router, tags=["fleet"])
 router.include_router(warehouse.router, tags=["warehouse"])
 router.include_router(sales_orders.router, tags=["sales-orders"])
+router.include_router(places.router, tags=["places"])
+router.include_router(tracking.router, tags=["tracking"])
+router.include_router(payloads.router, tags=["payloads"])
+router.include_router(proofs.router, tags=["proofs"])
+router.include_router(fleets_groups.router, tags=["fleet-groups"])
+router.include_router(suppliers.router, tags=["suppliers"])
+router.include_router(suppliers.po_router, tags=["purchase-orders"])
+router.include_router(service_areas.router, tags=["service-areas"])
+router.include_router(service_areas.zones_router, tags=["service-zones"])
+router.include_router(service_areas.rates_router, tags=["service-rates"])
