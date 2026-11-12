@@ -10,6 +10,51 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
+## [0.4.0] — 2026-11-12
+
+### Added
+
+**Enterprise integrations (optional profiles)**
+
+- **Keycloak 26 SSO** (`--profile sso`) — OIDC/SAML identity provider with a pre-configured `greyhook` realm, `greyhook-mes` public client, four roles (`admin`, `manager`, `supervisor`, `operator`), `org_id` JWT claim mapper, and two seeded demo users. Enables enterprise single sign-on without backend code changes; `KEYCLOAK_ISSUER_URL` env var wires it to the backend.
+- **OpenSearch 2.17.1** (`--profile search`) — single-node full-text search with four indices: `mes-telemetry`, `mes-downtime`, `mes-production`, `mes-investigations`. Security plugin disabled for self-hosted simplicity; 512 MB heap for OCI A1 Flex compatibility.
+- **OpenSearch Dashboards** — visual index explorer shipped alongside OpenSearch under the same profile.
+- **OpenSearch Indexer** — Python Kafka consumer (`opensearch-indexer/`) that subscribes to four MES topics and bulk-indexes telemetry, downtime events, production events, and AI investigation results with configurable batch size.
+- **Full-text search API** — `POST /api/v1/search` accepts a query string and type filter (`telemetry`, `downtime`, `production`, `investigations`, `all`), returns ranked hits with highlight snippets. Returns `503` gracefully when `OPENSEARCH_URL` is not configured.
+- **Node-RED 4.0** (`--profile integrations`) — visual OT/IT integration flows: MQTT → MES REST API bridge, ERP webhook receiver (`/webhook/erp/workorder`), and OEE alert poller (every 5 minutes). Pre-loaded flow tabs at `infra/node-red/flows.json`.
+
+**Manufacturing data model**
+
+- **BOM (Bill of Materials)** — `bom_lines` table with `organization_id`, `product_id`, `bom_ref`, component code/name, quantity (12,4 precision), unit, and criticality flag. Modelled after Odoo/iDempiere BOM line structure.
+- **Routing operations** — `routing_operations` table with work center, machine type, setup time (minutes), and run time per unit (minutes). Directly maps to ISA-95 RoutingOperation; `run_time_minutes_per_unit` is the ideal cycle time source for ISO 22400 Performance factor.
+- **Migration 0004** — Alembic revision adding both tables and extending `production_orders` with `bom_ref`, `routing_ref`, `notes`, and `priority` columns.
+
+**Seed data**
+
+- Richer demo dataset: 2 products (`AP-500` Alloy Wheel Hub, `AP-720` Gear Housing Cover), 2 production lines (A + B), 6 machines (mixed OPC-UA / MQTT / simulated protocols), 3 shifts (Morning / Afternoon / Night with correct `time()` objects and `days_of_week` arrays), 8 production orders across all statuses, 4 alert rules, 7 BOM lines, 7 routing operations, and 24-hour OEE history.
+
+### Changed
+
+- `docker-compose.yml` — added 5 new services (`keycloak`, `opensearch`, `opensearch-dashboards`, `opensearch-indexer`, `nodered`) all behind optional profiles; added `OPENSEARCH_URL` and `KEYCLOAK_ISSUER_URL` passthrough to backend service; added two new volumes (`opensearch_data`, `nodered_data`).
+- `backend/app/core/config.py` — added `opensearch_url` and `keycloak_issuer_url` settings fields (default empty string; no-op when unset).
+
+---
+
+## [0.3.0] — 2026-11-10
+
+### Added
+
+**Wired API endpoints (dashboard pages now hit real backend)**
+
+- Admin portal pages (`/admin/users`, `/admin/machines`, `/admin/shifts`, `/admin/alert-rules`, `/admin/llm-configs`) connected to their respective API routes; `IS_MOCK` toggle replaced with `NEXT_PUBLIC_USE_MOCK=false` env var across all hooks.
+- Alert rules CRUD — `POST/GET/PATCH/DELETE /api/v1/alert-rules`; threshold-based rules with channel config (Kafka topic / webhook), severity levels, and per-org scoping.
+- LLM configuration — `POST/GET /api/v1/llm-configs`; per-org LLM provider selection (Claude / OpenAI) with API key storage; used by the AI investigation engine.
+- Shift management — `POST/GET/PATCH /api/v1/shifts`; named shifts with `start_time`, `end_time`, and `days_of_week` array; linked to production orders and OEE attribution.
+- Shift handover — `POST /api/v1/shift-handover`; structured handover report with outgoing/incoming supervisor, machine status summary, open downtime items, and production vs target.
+- Module configuration — `GET/PATCH /api/v1/modules`; per-org feature flag table enabling/disabling dashboard modules (SPC, energy, traceability, genealogy) without redeploy.
+
+---
+
 ## [0.2.0] — 2026-11-08
 
 ### Security
@@ -58,6 +103,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ---
 
-[Unreleased]: https://github.com/heyjishh/GreyHook-MES/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/heyjishh/GreyHook-MES/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/heyjishh/GreyHook-MES/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/heyjishh/GreyHook-MES/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/heyjishh/GreyHook-MES/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/heyjishh/GreyHook-MES/releases/tag/v0.1.0

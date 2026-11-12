@@ -142,6 +142,9 @@ When something goes wrong, the **AI investigation engine** queries the productio
 | **Primary database** | PostgreSQL 16 + TimescaleDB | Relational + time-series in one, hypertables |
 | **ORM / migrations** | SQLAlchemy async + Alembic | Type-safe queries, schema versioning |
 | **Machine protocols** | OPC-UA + MQTT (Mosquitto) | Industry standard; covers 90% of PLCs |
+| **Full-text search** | OpenSearch 2.17 (optional) | Telemetry, downtime, and investigation search |
+| **Identity / SSO** | Keycloak 26 (optional) | OIDC/SAML enterprise single sign-on |
+| **OT/IT integration** | Node-RED 4.0 (optional) | Visual ERP webhook and MQTT bridge flows |
 | **Factory simulator** | Rust | Realistic multi-machine data for dev/demo |
 | **Infrastructure** | Oracle Cloud / AWS + Terraform | Free Tier A1 for MVP; AWS for scale |
 | **Containers** | Docker + Docker Compose | Reproducible local stack |
@@ -155,20 +158,33 @@ When something goes wrong, the **AI investigation engine** queries the productio
 ### Production visibility
 - Real-time machine state grid (Running · Idle · Fault · Changeover · Maintenance)
 - Shift production progress: actual vs planned, parts per hour
-- Live OEE breakdown — Availability, Performance, Quality, Overall
-- Downtime event log with category classification
+- Live OEE breakdown — Availability, Performance, Quality, Overall (ISO 22400 clamped [0,1])
+- Downtime event log with category classification and shift handover report
+- Production orders with BOM and routing-linked cycle time targets
+
+### Manufacturing data model
+- **Bill of Materials (BOM)** — multi-level component list per product with quantity, unit, and criticality flag
+- **Routing operations** — work center, setup time, and run time per unit; ideal cycle time source for ISO 22400 Performance factor
+- Based on Odoo / iDempiere data model conventions for ERP interoperability
 
 ### AI investigation
 - Natural-language queries over production data: *"Why did Line 2 miss target last shift?"*
 - Evidence assembly: telemetry anomalies, downtime patterns, shift comparison
 - Root-cause hypothesis with confidence rating
 - Recommended actions, not just observations
+- Full-text search across telemetry, downtime, production, and investigations (OpenSearch)
+
+### Enterprise integrations (optional profiles)
+- **SSO / OIDC** — Keycloak 26 with pre-configured realm, roles, and org_id JWT claim; drop-in for enterprise identity providers (`--profile sso`)
+- **OpenSearch** — full-text and fuzzy search across all MES data; Kafka→OpenSearch indexer pipeline (`--profile search`)
+- **Node-RED** — visual OT/IT bridge flows: MQTT→MES REST, ERP webhook receiver, OEE alert poller (`--profile integrations`)
+- **ERP webhook** — receive work orders from Tally / SAP B1 / Odoo via `POST /webhook/erp/workorder` (Node-RED maps to MES schema)
 
 ### Multi-tenant & multi-industry
 - Full hierarchy: Organization → Business Units → Plants → Production Lines → Machines
 - One deployment serves automotive, food processing, plastics, precision machining, and more
 - Industry-specific module configuration — only show what's relevant
-- Tenant isolation enforced at every query boundary
+- Tenant isolation enforced at every query boundary (`organization_id NOT NULL` on every row)
 
 ### Role-based access
 | Role | What they see |
@@ -271,7 +287,15 @@ Default seed credentials (development only):
 | manager@demo.com | demo1234 | Manager |
 | supervisor@demo.com | demo1234 | Supervisor |
 
-### 5. Run the factory simulator
+### 5. Seed demo data
+
+```bash
+docker compose exec backend python scripts/seed_demo.py
+```
+
+Creates 2 production lines, 6 machines, 2 products with BOM and routing, 3 shifts, 8 production orders, alert rules, and 24 hours of OEE history.
+
+### 6. Run the factory simulator
 
 ```bash
 docker compose --profile simulate up -d
@@ -279,13 +303,25 @@ docker compose --profile simulate up -d
 
 This generates realistic machine telemetry: production runs, downtime events, speed variations — full OEE story without real hardware.
 
-### 6. Enable monitoring (optional)
+### 7. Enable optional profiles
 
 ```bash
-docker compose --profile monitoring up -d
-```
+# Full-text search (OpenSearch + indexer)
+docker compose --profile search up -d
+# Opens OpenSearch Dashboards at http://localhost:5601
 
-Opens Grafana at `http://localhost:3001`, Redpanda Console at `http://localhost:8080`, Temporal UI at `http://localhost:8088`.
+# Enterprise SSO (Keycloak)
+docker compose --profile sso up -d
+# Keycloak admin at http://localhost:8180 — credentials: admin / devpassword
+
+# OT/IT integration (Node-RED)
+docker compose --profile integrations up -d
+# Node-RED editor at http://localhost:1880
+
+# Observability (Prometheus + Grafana + Redpanda Console + Temporal UI)
+docker compose --profile monitoring up -d
+# Grafana at http://localhost:3001, Redpanda Console at http://localhost:8080
+```
 
 ---
 
@@ -314,6 +350,19 @@ All configuration is environment-driven. Copy `.env.example` to `.env`.
 | `LLM_PROVIDER` | `claude` (default) or `openai` |
 | `ANTHROPIC_API_KEY` | Required when `LLM_PROVIDER=claude` |
 | `OPENAI_API_KEY` | Required when `LLM_PROVIDER=openai` |
+
+### Search (optional — `--profile search`)
+
+| Variable | Description | Default |
+|---|---|---|
+| `OPENSEARCH_URL` | OpenSearch base URL | `http://opensearch:9200` (in-stack) |
+
+### SSO (optional — `--profile sso`)
+
+| Variable | Description | Default |
+|---|---|---|
+| `KEYCLOAK_ISSUER_URL` | Keycloak realm issuer URL | _(empty — SSO disabled)_ |
+| `KEYCLOAK_ADMIN_PASSWORD` | Keycloak admin console password | `devpassword` |
 
 ### Observability (optional)
 
@@ -402,6 +451,38 @@ POST /ai/query                        Natural language query
 POST /ai/investigate                  Start root-cause investigation (async)
 GET  /ai/investigations/{id}          Poll investigation status + result
 ```
+
+### Shifts & Handover
+
+```
+GET  /shifts                          List shifts for current org
+POST /shifts                          Create shift (admin)
+PATCH /shifts/{id}                    Update shift
+POST /shift-handover                  Submit shift handover report
+GET  /shift-handover                  List handover reports
+```
+
+### Alert Rules
+
+```
+GET  /alert-rules                     List alert rules
+POST /alert-rules                     Create alert rule
+PATCH /alert-rules/{id}               Update rule
+DELETE /alert-rules/{id}              Delete rule
+```
+
+### Search (requires `--profile search`)
+
+```
+POST /search                          Full-text search across MES data
+GET  /search/indices                  List OpenSearch index health
+```
+
+Request body for `POST /search`:
+```json
+{ "query": "vibration fault line-a", "type": "all", "from_": 0, "size": 20 }
+```
+`type` accepts: `telemetry`, `downtime`, `production`, `investigations`, `all`
 
 ### Real-time (SSE)
 
@@ -601,8 +682,12 @@ GreyHook-MES/
 ├── telemetry-processor/        Rust Kafka consumer → TimescaleDB
 ├── simulator/                  Rust factory data simulator
 │
+├── opensearch-indexer/         Python Kafka→OpenSearch indexer (search profile)
+│
 ├── infra/
 │   ├── docker/                Mosquitto, Temporal dynamic config
+│   ├── keycloak/              Keycloak realm import JSON (SSO profile)
+│   ├── node-red/              Node-RED flow definitions (integrations profile)
 │   ├── monitoring/            Prometheus + Grafana provisioning
 │   ├── terraform-oci/         Oracle Cloud Free Tier deployment
 │   └── terraform/             AWS production deployment
@@ -625,35 +710,47 @@ GreyHook-MES/
 
 ## Roadmap
 
-### v0.2 — Security hardening (shipped)
+### v0.2 — Security hardening ✅
 - [x] Startup secret validation (rejects weak defaults in production)
 - [x] Audit logging middleware (all mutating API calls recorded)
 - [x] Configurable CORS (env-driven, no hardcoded origins)
 - [x] SECURITY.md policy and hardening checklist
 
-### v0.3 — Industrial connectivity
-- [ ] Live OPC-UA integration with real PLC (Siemens S7, Allen-Bradley)
-- [ ] MQTT authentication (username/password + TLS)
-- [ ] Edge gateway reconnect / buffer-and-replay on network loss
-- [ ] OPC-UA node discovery UI
+### v0.3 — API wiring ✅
+- [x] Admin portal pages wired to real backend (users, machines, shifts, alert rules, LLM configs)
+- [x] Alert rules CRUD with Kafka/webhook channel config
+- [x] Shift management with `days_of_week` and shift handover report
+- [x] Per-org module configuration (enable/disable dashboard modules)
 
-### v0.4 — Production intelligence
-- [ ] Shift handover report (auto-generated from last 8 hours)
-- [ ] Downtime Pareto chart (automated ranking by frequency × duration)
-- [ ] Planned vs actual production comparison with variance alerts
-- [ ] Email / WhatsApp alerts on OEE threshold breach
+### v0.4 — Enterprise integrations ✅
+- [x] Keycloak 26 SSO (OIDC realm, roles, org_id JWT claim, optional `--profile sso`)
+- [x] OpenSearch full-text search across all MES data (optional `--profile search`)
+- [x] Node-RED OT/IT integration flows (MQTT bridge, ERP webhook, OEE alert poller)
+- [x] BOM and routing operations schema (ISA-95 / Odoo-compatible)
+- [x] Richer seed data: 2 lines, 6 machines, 2 products, BOM, routing, 8 orders, 24h OEE
 
 ### v0.5 — AI intelligence
+- [ ] OEE forecasting layer (TDA+SARIMAX; arXiv:2507.02890)
+- [ ] Causal root-cause prescription — "why" not just "when" (arXiv:2512.00969)
 - [ ] Multi-shift root-cause comparison
 - [ ] Predictive maintenance signals from telemetry patterns
 - [ ] Natural language report generation (PDF export)
-- [ ] AI-driven scheduling recommendations
+- [ ] Local LLM Text-to-SQL for factory data (arXiv:2606.01338 approach)
 
-### v0.6 — Pilot readiness
+### v0.6 — Backend for mock-only frontend pages
+- [ ] SPC (Statistical Process Control) — control charts, Cpk, violation alerts
+- [ ] Quality inspections — inspection templates, pass/fail results, non-conformance
+- [ ] Traceability and genealogy — lot tracking, component → product linkage
+- [ ] Energy monitoring — per-machine kWh, peak/off-peak cost, carbon tracking
+- [ ] Labor tracking — operator assignment, utilization, attendance
+- [ ] Advanced scheduling — constraint-based job sequencing, gantt view
+- [ ] Andon / escalation board — visual alert board, escalation SLA timers
+
+### v0.7 — Pilot readiness
 - [ ] Mobile-first PWA (offline support for operator entry)
-- [ ] ERP integration (Tally, SAP B1) for production orders
-- [ ] White-labelling (factory-specific logo, theme)
-- [ ] 21 CFR Part 11 / GAMP 5 audit trail (pharma)
+- [ ] ERP deep integration (Tally, SAP B1 — bidirectional, not just webhook)
+- [ ] White-labelling (factory-specific logo, theme, subdomain)
+- [ ] 21 CFR Part 11 / GAMP 5 audit trail (pharma pilot)
 
 ---
 
