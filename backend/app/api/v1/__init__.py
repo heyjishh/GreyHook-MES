@@ -1,10 +1,10 @@
 from fastapi import APIRouter
 
 from app.api.v1 import (
-    ai, alert_rules, andon, auth, downtime, energy, factories, forecast,
-    health, integrations, labor, llm_configs, machines, modules, oee,
-    production, quality, scheduling, search, shift_handover, shifts, spc,
-    sse, traceability, users,
+    ai, alert_rules, andon, auth, dispatch, downtime, energy, factories, fleet,
+    forecast, gate_pass, grn, health, integrations, inventory, labor, llm_configs,
+    machines, modules, oee, production, quality, sales_orders, scheduling, search,
+    shift_handover, shifts, spc, sse, traceability, users, warehouse,
 )
 
 router = APIRouter()
@@ -34,3 +34,10 @@ router.include_router(labor.router, tags=["labor"])
 router.include_router(scheduling.router, tags=["scheduling"])
 router.include_router(andon.router, tags=["andon"])
 router.include_router(forecast.router, tags=["forecast"])
+router.include_router(gate_pass.router, tags=["gate-pass"])
+router.include_router(inventory.router, tags=["inventory"])
+router.include_router(grn.router, tags=["grn"])
+router.include_router(dispatch.router, tags=["dispatch"])
+router.include_router(fleet.router, tags=["fleet"])
+router.include_router(warehouse.router, tags=["warehouse"])
+router.include_router(sales_orders.router, tags=["sales-orders"])
