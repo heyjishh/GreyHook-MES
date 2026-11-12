@@ -1,4 +1,6 @@
-"""Synchronous LLM caller for simple inline AI features."""
+"""Provider-agnostic LLM caller: Anthropic, OpenAI, Gemini."""
+import uuid as _uuid
+
 import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -6,10 +8,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.models.org_llm_config import OrgLLMConfig
 
-import uuid as _uuid
 
+async def _get_provider_config(
+    db: AsyncSession, org_id: _uuid.UUID
+) -> tuple[str, str, str]:
+    """Return (api_key, model_id, provider) for the org's active LLM config.
 
-async def _get_api_key(db: AsyncSession, org_id: _uuid.UUID) -> tuple[str, str]:
+    Falls back to env-var defaults when no DB config is active.
+    """
     settings = get_settings()
     result = await db.execute(
         select(OrgLLMConfig).where(
@@ -21,21 +27,86 @@ async def _get_api_key(db: AsyncSession, org_id: _uuid.UUID) -> tuple[str, str]:
     cfg = result.scalar_one_or_none()
     if cfg:
         from app.api.v1.llm_configs import _decrypt
-        return _decrypt(cfg.api_key_encrypted), cfg.model_id or "claude-sonnet-4-6"
-    return settings.anthropic_api_key, "claude-sonnet-4-6"
+        return _decrypt(cfg.api_key_encrypted), cfg.model_id or "claude-sonnet-4-6", cfg.provider
+
+    if settings.gemini_api_key:
+        return settings.gemini_api_key, "gemini-2.0-flash", "gemini"
+    if settings.openai_api_key:
+        return settings.openai_api_key, "gpt-4o", "openai"
+    return settings.anthropic_api_key, "claude-sonnet-4-6", "anthropic"
 
 
-async def ask_claude(prompt: str, db: AsyncSession, org_id: _uuid.UUID, max_tokens: int = 400) -> str:
-    api_key, model_id = await _get_api_key(db, org_id)
-    if not api_key:
-        return "AI commentary unavailable (no API key configured)."
+async def _call_anthropic(api_key: str, model_id: str, prompt: str, max_tokens: int) -> str:
     async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.post(
             "https://api.anthropic.com/v1/messages",
-            headers={"x-api-key": api_key, "anthropic-version": "2023-06-01", "content-type": "application/json"},
-            json={"model": model_id, "max_tokens": max_tokens, "messages": [{"role": "user", "content": prompt}]},
+            headers={
+                "x-api-key": api_key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json",
+            },
+            json={
+                "model": model_id,
+                "max_tokens": max_tokens,
+                "messages": [{"role": "user", "content": prompt}],
+            },
         )
         if resp.status_code != 200:
             return "AI commentary unavailable."
-        data = resp.json()
-        return data["content"][0]["text"].strip()
+        return resp.json()["content"][0]["text"].strip()
+
+
+async def _call_openai_compat(
+    api_key: str, model_id: str, prompt: str, max_tokens: int, base_url: str
+) -> str:
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.post(
+            f"{base_url.rstrip('/')}/chat/completions",
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "content-type": "application/json",
+            },
+            json={
+                "model": model_id,
+                "max_tokens": max_tokens,
+                "messages": [{"role": "user", "content": prompt}],
+            },
+        )
+        if resp.status_code != 200:
+            return "AI commentary unavailable."
+        return resp.json()["choices"][0]["message"]["content"].strip()
+
+
+async def ask_llm(
+    prompt: str,
+    db: AsyncSession,
+    org_id: _uuid.UUID,
+    max_tokens: int = 400,
+) -> str:
+    """Call the org's configured LLM provider and return the response text."""
+    api_key, model_id, provider = await _get_provider_config(db, org_id)
+    if not api_key:
+        return "AI commentary unavailable (no API key configured)."
+
+    settings = get_settings()
+
+    if provider == "gemini":
+        base_url = settings.gemini_api_base_url
+        return await _call_openai_compat(api_key, model_id, prompt, max_tokens, base_url)
+
+    if provider == "openai":
+        return await _call_openai_compat(
+            api_key, model_id, prompt, max_tokens, "https://api.openai.com/v1"
+        )
+
+    return await _call_anthropic(api_key, model_id, prompt, max_tokens)
+
+
+async def ask_claude(
+    prompt: str,
+    db: AsyncSession,
+    org_id: _uuid.UUID,
+    max_tokens: int = 400,
+) -> str:
+    """Backward-compatible alias for ask_llm."""
+    return await ask_llm(prompt, db, org_id, max_tokens)

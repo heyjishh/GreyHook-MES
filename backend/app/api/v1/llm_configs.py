@@ -172,6 +172,6 @@ def _default_model(provider: str) -> str:
     return {
         "anthropic": "claude-sonnet-4-6",
         "openai": "gpt-4o",
-        "gemini": "gemini-1.5-pro",
+        "gemini": "gemini-2.0-flash",
         "xai": "grok-2",
     }.get(provider, "unknown")
