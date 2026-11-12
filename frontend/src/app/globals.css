@@ -28,8 +28,8 @@
     /* ── Text — Billow ink ── */
     --text-primary:   #001C2E;
     --text-secondary: #2A4A60;
-    --text-tertiary:  #6A8A9A;
-    --text-disabled:  #B0C4CE;
+    --text-tertiary:  #2E5068;
+    --text-disabled:  #8AAABB;
 
     /* ── States ── */
     --success:        #1A7A40;
@@ -48,7 +48,7 @@
     /* ── Sidebar — structural navy (the 40 % blue lives here) ── */
     --sidebar-bg:       #040E36;
     --sidebar-fg:       #F8F4EE;
-    --sidebar-fg-muted: #7090C0;
+    --sidebar-fg-muted: #9AB4D4;
     --sidebar-border:   #0D2060;
     --sidebar-hover-bg: #071740;
   }
